@@ -13,6 +13,8 @@ settings:
   CURRENT_PROJECT_VERSION: "1"
   SWIFT_VERSION: "5.0"
   IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+  CODE_SIGN_STYLE: Automatic
+  DEVELOPMENT_TEAM: ""
 
 targets:
   FlightCapture:
@@ -28,6 +30,8 @@ targets:
       INFOPLIST_FILE: FlightCapture/Info.plist
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: "4D8T9L8574"
     info:
       path: FlightCapture/Info.plist
       properties:

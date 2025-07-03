@@ -33,8 +33,6 @@
 				<dict>
 					<key>UISceneConfigurationName</key>
 					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
 				</dict>
 			</array>
 		</dict>
@@ -53,6 +51,14 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to scan flight documents for import.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>logten</string>
+		<string>logtenprox</string>
+		<string>logtenpro</string>
 	</array>
 </dict>
 </plist>
