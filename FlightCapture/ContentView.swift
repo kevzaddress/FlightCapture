@@ -503,6 +503,10 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     let crewFlightAttendant2ROI = FieldROI(x: 175/2360, y: 900/1640, width: (635-175)/2360, height: (1050-900)/1640)
     let crewFlightAttendant3ROI = FieldROI(x: 695/2360, y: 896/1640, width: (1153-695)/2360, height: (1053-896)/1640)
     let crewFlightAttendant4ROI = FieldROI(x: 1205/2360, y: 900/1640, width: (1672-1205)/2360, height: (1050-900)/1640)
+    
+    // Dashboard crew names ROI (for single image import)
+    let dashboardCrewNamesROI = FieldROI(x: 26/2360, y: 1205/1640, width: (460-26)/2360, height: (1395-1205)/1640)
+    
     @State private var parsedCrewList: [String] = []
     // Helper to title-case a name (first letter of each word uppercase, rest lowercase)
     func titleCase(_ name: String) -> String {
@@ -521,11 +525,22 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             let parts = line.components(separatedBy: ":")
             guard parts.count >= 2 else { return nil }
             let role = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            let ocrText = parts[1]
-            // Split OCR text by comma, trim, and filter empty
-            let fields = ocrText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-            // The name is usually the second field
-            let name = fields.count > 1 ? titleCase(fields[1]) : ""
+            let ocrText = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // For dashboard crew parsing, the name is directly after the colon
+            // For crew list parsing, the name might be in a comma-separated list
+            let name: String
+            if ocrText.contains(",") {
+                // Split OCR text by comma, trim, and filter empty
+                let fields = ocrText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                // The name is usually the second field
+                name = fields.count > 1 ? titleCase(fields[1]) : titleCase(fields.first ?? "")
+            } else {
+                // Direct name after colon (dashboard crew parsing)
+                name = titleCase(ocrText)
+            }
+            
+            print("[DEBUG] crewNamesAndCodes: role='\(role)', ocrText='\(ocrText)', name='\(name)'")
             return (role, name)
         }
     }
@@ -597,10 +612,10 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         print("[DEBUG] Image #\(idx+1) classified as: \(type)")
                                         // After all images are classified, process ROIs
                                         if imageTypes.count == newItems.count {
-                                            // If only one image, treat as dashboard and process all ROIs
+                                            // If only one image, treat as dashboard and process both dashboard and crew ROIs
                                             if newItems.count == 1, let img = importedImages.first {
                                                 processDashboardROIs(from: img)
-                                                processCrewROIs(from: img)
+                                                processDashboardCrewROIs(from: img)  // Use dashboard-specific crew ROIs
                                             } else if newItems.count == 2 {
                                                 // Two images: process dashboard for flight details, crewList for crew
                                                 if let dashImg = dashboardImage {
@@ -1161,6 +1176,87 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                 DispatchQueue.main.async { ocrInTime = text }
             }
         }
+    }
+    
+    // Helper: process crew ROIs from dashboard image (using original dashboard crew ROI)
+    func processDashboardCrewROIs(from uiImage: UIImage) {
+        print("[DEBUG] Processing dashboard crew ROIs using dashboardCrewNamesROI")
+        
+        // Crop the dashboard crew names section
+        if let cropped = cropImage(uiImage, to: dashboardCrewNamesROI) {
+            ocrText(from: cropped, label: "DashboardCrewNames") { crewText in
+                DispatchQueue.main.async {
+                    print("[DEBUG] Dashboard crew names OCR: \(crewText)")
+                    
+                    // Parse the crew text and extract names
+                    let crewNames = self.parseDashboardCrewText(crewText)
+                    
+                    // Create parsed crew list entries
+                    self.parsedCrewList = []
+                    print("[DEBUG] Creating parsed crew list with \(crewNames.count) names")
+                    for (index, name) in crewNames.enumerated() {
+                        switch index {
+                        case 0:
+                            self.parsedCrewList.append("Commander: \(name)")
+                            print("[DEBUG] Added Commander: \(name)")
+                        case 1:
+                            self.parsedCrewList.append("SIC: \(name)")
+                            print("[DEBUG] Added SIC: \(name)")
+                        case 2:
+                            self.parsedCrewList.append("Relief: \(name)")
+                            print("[DEBUG] Added Relief: \(name)")
+                        case 3:
+                            self.parsedCrewList.append("Relief2: \(name)")
+                            print("[DEBUG] Added Relief2: \(name)")
+                        default:
+                            break
+                        }
+                    }
+                    print("[DEBUG] Final parsedCrewList: \(self.parsedCrewList)")
+                }
+            }
+        } else {
+            print("[DEBUG] Failed to crop dashboard crew names ROI")
+        }
+    }
+    
+    // Helper function to parse crew names from dashboard crew ROI text
+    func parseDashboardCrewText(_ text: String) -> [String] {
+        var crewNames: [String] = []
+        
+        print("[DEBUG] Parsing dashboard crew text: '\(text)'")
+        
+        // Split by common separators used in crew lists
+        let parts = text.components(separatedBy: CharacterSet(charactersIn: ",~•@"))
+        
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("[DEBUG] Processing part: '\(trimmed)'")
+            
+            // Look for patterns that look like names (2+ words, starts with letter)
+            let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+            if words.count >= 2 {
+                let firstWord = words[0]
+                let secondWord = words[1]
+                
+                print("[DEBUG] Checking words: '\(firstWord)' '\(secondWord)'")
+                
+                // Check if it looks like a name (starts with letter)
+                if firstWord.first?.isLetter == true && 
+                   secondWord.first?.isLetter == true {
+                    
+                    let name = titleCase("\(firstWord) \(secondWord)")
+                    print("[DEBUG] Found name: '\(name)'")
+                    if !crewNames.contains(name) && crewNames.count < 4 {
+                        crewNames.append(name)
+                        print("[DEBUG] Added name: '\(name)' to crew list")
+                    }
+                }
+            }
+        }
+        
+        print("[DEBUG] Final crew names: \(crewNames)")
+        return crewNames
     }
     
     // Helper: process all crew ROIs from crew image
