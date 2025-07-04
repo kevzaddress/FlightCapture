@@ -137,4 +137,52 @@ func testExtractTimes() {
     print("OFF: \(extractOffTime(from: offSample) ?? "Not found")")
     print("ON: \(extractOnTime(from: onSample) ?? "Not found")")
     print("IN: \(extractInTime(from: inSample) ?? "Not found")")
+}
+
+/// Extracts the departure airport ICAO code (e.g., VHHH, KDFW) from recognized text.
+func extractDepartureAirport(from recognizedText: String) -> String? {
+    // Look for 'Departure' or 'Dep' followed by a 4-letter code
+    let depPattern = "(?:Departure|Dep)[^A-Z]*([A-Z]{4})"
+    if let regex = try? NSRegularExpression(pattern: depPattern, options: .caseInsensitive) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let codeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[codeRange])
+        }
+    }
+    // Fallback: first 4-letter ICAO code
+    let fallbackPattern = "\\b[A-Z]{4}\\b"
+    if let regex = try? NSRegularExpression(pattern: fallbackPattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let codeRange = Range(match.range, in: recognizedText) {
+            return String(recognizedText[codeRange])
+        }
+    }
+    return nil
+}
+
+/// Extracts the arrival airport ICAO code (e.g., VHHH, KDFW) from recognized text.
+func extractArrivalAirport(from recognizedText: String) -> String? {
+    // Look for 'Arrival' or 'Arr' followed by a 4-letter code
+    let arrPattern = "(?:Arrival|Arr)[^A-Z]*([A-Z]{4})"
+    if let regex = try? NSRegularExpression(pattern: arrPattern, options: .caseInsensitive) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let codeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[codeRange])
+        }
+    }
+    // Fallback: second 4-letter ICAO code (if present)
+    let fallbackPattern = "\\b[A-Z]{4}\\b"
+    if let regex = try? NSRegularExpression(pattern: fallbackPattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        let matches = regex.matches(in: recognizedText, options: [], range: range)
+        if matches.count > 1, let codeRange = Range(matches[1].range, in: recognizedText) {
+            return String(recognizedText[codeRange])
+        } else if let match = matches.first, let codeRange = Range(match.range, in: recognizedText) {
+            return String(recognizedText[codeRange])
+        }
+    }
+    return nil
 } 

@@ -86,7 +86,9 @@ struct ContentView: View {
     @State private var showJSONAlert = false
     @State private var exportedJSON = ""
     @State private var showLogTenAlert = false
-    @State private var selectedPhoto: PhotosPickerItem? = nil
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var importedImages: [UIImage] = []
+    @State private var ocrResults: [String] = []
     @State private var importedImage: UIImage? = nil
     @State private var isProcessingImage = false
     @State private var croppedFlightNumber: UIImage? = nil
@@ -119,13 +121,28 @@ struct ContentView: View {
     let dayDateROI = FieldROI(x: 480/2360, y: 56/1640, width: (543-480)/2360, height: (130-56)/1640)
     // Use OCR values if screenshot is imported, otherwise fallback to regex extraction
     var flightNumber: String? {
-        importedImage != nil ? ocrFlightNumber.trimmingCharacters(in: .whitespacesAndNewlines) : extractFlightNumber(from: recognizedText)
+        let trimmed = ocrFlightNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        // fallback to regex/extraction from recognizedText
+        return extractFlightNumber(from: recognizedText)
     }
     var departureAirport: String? {
-        importedImage != nil ? ocrDeparture.trimmingCharacters(in: .whitespacesAndNewlines) : extractFlightNumber(from: recognizedText)
+        let trimmed = ocrDeparture.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        // fallback to regex/extraction from recognizedText
+        return extractDepartureAirport(from: recognizedText)
     }
     var arrivalAirport: String? {
-        importedImage != nil ? ocrArrival.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        let trimmed = ocrArrival.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        // fallback to regex/extraction from recognizedText
+        return extractArrivalAirport(from: recognizedText)
+    }
+    var aircraftReg: String? {
+        let trimmed = ocrAircraftReg.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return normalizeAircraftReg(trimmed) }
+        // fallback to regex/extraction from recognizedText
+        return normalizeAircraftReg(extractAircraftRegistration(from: recognizedText))
     }
     // Helper to normalize aircraft registration (e.g., BLRU -> B-LRU)
     func normalizeAircraftReg(_ reg: String?) -> String? {
@@ -142,9 +159,6 @@ struct ContentView: View {
             return "B-" + suffix
         }
         return reg
-    }
-    var aircraftReg: String? {
-        return normalizeAircraftReg(importedImage != nil ? ocrAircraftReg : extractAircraftRegistration(from: recognizedText))
     }
     // Helper to extract ICAO airport code from OCR string (e.g., "OERK, RUH" -> "OERK")
     func extractICAOCode(_ text: String) -> String? {
@@ -221,21 +235,29 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         importedImage != nil ? extractZuluTime(ocrSchedArr).time : nil
     }
     
-    // Time field computed properties
+    // Time field computed properties with fallback
     var outTime: String? {
-        importedImage != nil ? extractOutTime(from: ocrOutTime) : nil
+        let trimmed = ocrOutTime.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return extractOutTime(from: trimmed) }
+        return extractOutTime(from: recognizedText)
     }
     
     var offTime: String? {
-        importedImage != nil ? extractOffTime(from: ocrOffTime) : nil
+        let trimmed = ocrOffTime.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return extractOffTime(from: trimmed) }
+        return extractOffTime(from: recognizedText)
     }
     
     var onTime: String? {
-        importedImage != nil ? extractOnTime(from: ocrOnTime) : nil
+        let trimmed = ocrOnTime.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return extractOnTime(from: trimmed) }
+        return extractOnTime(from: recognizedText)
     }
     
     var inTime: String? {
-        importedImage != nil ? extractInTime(from: ocrInTime) : nil
+        let trimmed = ocrInTime.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return extractInTime(from: trimmed) }
+        return extractInTime(from: recognizedText)
     }
     // Helper to infer the full date from OCR day-of-week and day-of-month
     func inferDate(dayOfWeek: String, dayOfMonth: Int, today: Date = Date()) -> Date? {
@@ -341,23 +363,48 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         )
         print("[DEBUG] Generated flight_key: \(flightKey)")
         
-        let aircraftID = normalizeAircraftReg(importedImage != nil ? ocrAircraftReg : extractAircraftRegistration(from: recognizedText)) ?? "B-TEST"
+        let aircraftID = aircraftReg ?? "B-TEST"
         print("[DEBUG] Normalized Aircraft ID for export: \(aircraftID)")
 
-        // Crew mapping logic
+        // Crew mapping logic (map parsed roles to LogTen fields)
         var crewFields: [String: String] = [:]
-        if crewNamesAndCodes.count > 0 {
-            crewFields["flight_selectedCrewCommander"] = crewNamesAndCodes[0].name
-        }
-        if crewNamesAndCodes.count > 1 {
-            crewFields["flight_selectedCrewSIC"] = crewNamesAndCodes[1].name
-        }
-        if crewNamesAndCodes.count == 3 {
-            crewFields["flight_selectedCrewRelief2"] = crewNamesAndCodes[2].name
-        }
-        if crewNamesAndCodes.count == 4 {
-            crewFields["flight_selectedCrewRelief"] = crewNamesAndCodes[2].name
-            crewFields["flight_selectedCrewRelief2"] = crewNamesAndCodes[3].name
+        for (role, name) in crewNamesAndCodes {
+            print("[DEBUG] Processing crew role: '\(role)' -> '\(name)'")
+            switch role.lowercased() {
+            case "commander":
+                crewFields["flight_selectedCrewCommander"] = name
+                crewFields["flight_selectedCrewPIC"] = name
+            case "sic":
+                crewFields["flight_selectedCrewSIC"] = name
+            case "relief":
+                crewFields["flight_selectedCrewRelief"] = name
+            case "relief2":
+                crewFields["flight_selectedCrewRelief2"] = name
+            case "custom1_ism":
+                crewFields["flight_selectedCrewCustom1"] = name  // ISM
+                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom1 (ISM)")
+            case "custom2_so":
+                crewFields["flight_selectedCrewCustom2"] = name  // SO
+            case "custom3_stc":
+                crewFields["flight_selectedCrewCustom3"] = name  // STC
+            case "custom4_sp":
+                crewFields["flight_selectedCrewCustom4"] = name  // SP
+                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom4 (SP)")
+            case "custom5_fp":
+                crewFields["flight_selectedCrewCustom5"] = name  // FP
+                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom5 (FP)")
+            case "flightattendant":
+                crewFields["flight_selectedCrewFlightAttendant"] = name  // Primary FA
+                print("[DEBUG] Assigned \(name) to flight_selectedCrewFlightAttendant (Primary FA)")
+            case "flightattendant2":
+                crewFields["flight_selectedCrewFlightAttendant2"] = name
+            case "flightattendant3":
+                crewFields["flight_selectedCrewFlightAttendant3"] = name
+            case "flightattendant4":
+                crewFields["flight_selectedCrewFlightAttendant4"] = name
+            default:
+                break
+            }
         }
 
         // Use flightKey in the exported entity
@@ -444,11 +491,19 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         showLogTenAlert = true
     }
     
-    // Crew list ROI: top-left (26, 1205), bottom-right (460, 1395)
-    let crewListROI = FieldROI(x: 26/2360, y: 1205/1640, width: (460-26)/2360, height: (1395-1205)/1640)
-
-    @State private var croppedCrewList: UIImage? = nil
-    @State private var ocrCrewList: String = ""
+    // Step 4: Crew list ROIs (normalized for 2360x1640)
+    let commanderROI = FieldROI(x: 175/2360, y: 331/1640, width: (596-175)/2360, height: (538-331)/1640)
+    let sicROI = FieldROI(x: 1212/2360, y: 331/1640, width: (1624-1212)/2360, height: (538-331)/1640)
+    let reliefROI = FieldROI(x: 695/2360, y: 331/1640, width: (1111-695)/2360, height: (538-331)/1640)
+    let relief2ROI = FieldROI(x: 1724/2360, y: 331/1640, width: (2140-1724)/2360, height: (538-331)/1640)
+    let crewCustom1ROI = FieldROI(x: 1205/2360, y: 705/1640, width: (1674-1205)/2360, height: (850-705)/1640)
+    let crewCustom2ROI = FieldROI(x: 175/2360, y: 705/1640, width: (635-175)/2360, height: (850-705)/1640)
+    let crewCustom4ROI = FieldROI(x: 695/2360, y: 705/1640, width: (1154-695)/2360, height: (850-705)/1640)
+    let crewFlightAttendantROI = FieldROI(x: 1715/2360, y: 705/1640, width: (2180-1715)/2360, height: (850-705)/1640)
+    let crewFlightAttendant2ROI = FieldROI(x: 175/2360, y: 900/1640, width: (635-175)/2360, height: (1050-900)/1640)
+    let crewFlightAttendant3ROI = FieldROI(x: 695/2360, y: 896/1640, width: (1153-695)/2360, height: (1053-896)/1640)
+    let crewFlightAttendant4ROI = FieldROI(x: 1205/2360, y: 900/1640, width: (1672-1205)/2360, height: (1050-900)/1640)
+    @State private var parsedCrewList: [String] = []
     // Helper to title-case a name (first letter of each word uppercase, rest lowercase)
     func titleCase(_ name: String) -> String {
         return name
@@ -459,27 +514,24 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             }
             .joined(separator: " ")
     }
-    var crewNamesAndCodes: [(name: String, code: String)] {
-        // Split by comma, trim, filter empty
-        let items = ocrCrewList
-            .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            // Remove all bullet and dot characters (• · ● ▪️ and similar)
-            .map { $0.replacingOccurrences(of: "[\u{2022}\u{00b7}\u{25cf}\u{25aa}\u{fe0f}\u{2024}\u{2219}\u{2027}]", with: "", options: .regularExpression) }
-            .map { $0.replacingOccurrences(of: "[^A-Za-z0-9 -]", with: "", options: .regularExpression) } // Remove extraneous except space and hyphen
-        // Heuristic: codes are always at the end, one per name
-        let codePattern = "^[0-9E]-[A-Z]{2}$"
-        let codeCount = items.filter { $0.range(of: codePattern, options: .regularExpression) != nil }.count
-        let nameCount = items.count - codeCount
-        guard nameCount > 0, codeCount > 0, nameCount == codeCount else {
-            // fallback: just return names, no codes, title-case names
-            return items.map { (titleCase($0), "") }
+    // Returns [(role, name)] for each parsed crew ROI result, extracting and title-casing the name
+    var crewNamesAndCodes: [(role: String, name: String)] {
+        parsedCrewList.compactMap { line in
+            // Split "Role: OCRText"
+            let parts = line.components(separatedBy: ":")
+            guard parts.count >= 2 else { return nil }
+            let role = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let ocrText = parts[1]
+            // Split OCR text by comma, trim, and filter empty
+            let fields = ocrText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            // The name is usually the second field
+            let name = fields.count > 1 ? titleCase(fields[1]) : ""
+            return (role, name)
         }
-        let names = Array(items.prefix(nameCount)).map { titleCase($0) }
-        let codes = Array(items.suffix(codeCount)).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        return zip(names, codes).map { ($0, $1) }
     }
+    
+    // Step 3: Classification of each image as 'crewList' or 'dashboard'
+    @State private var imageTypes: [String] = [] // 'crewList' or 'dashboard'
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -493,108 +545,76 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     .background(Color.purple)
                     .foregroundColor(.white)
                     .cornerRadius(8)
-                PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
-                    Text("Import Screenshot")
+                PhotosPicker(
+                    selection: $selectedPhotos,
+                    maxSelectionCount: 2, // Allow up to 2 images
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Text("Import Screenshots")
                         .font(.headline)
                         .padding(10)
                         .background(Color.purple)
                         .foregroundColor(.white)
                         .cornerRadius(8)
                 }
-                .onChange(of: selectedPhoto, initial: false) { _, newItem in
-                    print("[DEBUG] User selected a photo: \(String(describing: newItem))")
-                    if let newItem = newItem {
+                .onChange(of: selectedPhotos, initial: false) { _, newItems in
+                    print("[DEBUG] User selected photos: \(newItems.map { String(describing: $0) })")
+                    importedImages = []
+                    ocrResults = []
+                    imageTypes = []
+                    parsedCrewList = []
+                    // Temporary holders for dashboard/crewList images
+                    var dashboardImage: UIImage? = nil
+                    var crewListImage: UIImage? = nil
+                    // Load and classify images
+                    for (idx, item) in newItems.enumerated() {
                         Task {
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
+                            if let data = try? await item.loadTransferable(type: Data.self),
                                let uiImage = UIImage(data: data) {
-                                importedImage = uiImage
-                                print("[DEBUG] Successfully loaded image from picker.")
-                                // Crop to ROIs
-                                croppedFlightNumber = cropImage(uiImage, to: flightNumberROI)
-                                croppedAircraftType = cropImage(uiImage, to: aircraftTypeROI)
-                                croppedAircraftReg  = cropImage(uiImage, to: aircraftRegROI)
-                                // New fields: placeholder ROIs (update with real coordinates as needed)
-                                croppedDeparture = cropImage(uiImage, to: departureROI)
-                                croppedArrival = cropImage(uiImage, to: arrivalROI)
-                                croppedSchedDep = cropImage(uiImage, to: schedDepROI)
-                                croppedSchedArr = cropImage(uiImage, to: schedArrROI)
-                                // Run OCR on each cropped region
-                                if let img = croppedFlightNumber {
-                                    ocrText(from: img, label: "FlightNumber") { text in
-                                        DispatchQueue.main.async { ocrFlightNumber = text }
-                                    }
+                                print("[DEBUG] Loaded image #\(idx+1) from picker, size: \(uiImage.size)")
+                                DispatchQueue.main.async {
+                                    importedImages.append(uiImage)
                                 }
-                                if let img = croppedAircraftType {
-                                    ocrText(from: img, label: "AircraftType") { text in
-                                        DispatchQueue.main.async { ocrAircraftType = text }
-                                    }
-                                }
-                                if let img = croppedAircraftReg {
-                                    ocrText(from: img, label: "AircraftReg") { text in
-                                        DispatchQueue.main.async { ocrAircraftReg = text }
-                                    }
-                                }
-                                if let img = croppedDeparture {
-                                    ocrText(from: img, label: "Departure") { text in
-                                        DispatchQueue.main.async { ocrDeparture = text }
-                                    }
-                                }
-                                if let img = croppedArrival {
-                                    ocrText(from: img, label: "Arrival") { text in
-                                        DispatchQueue.main.async { ocrArrival = text }
-                                    }
-                                }
-                                if let img = croppedSchedDep {
-                                    ocrText(from: img, label: "SchedDep") { text in
-                                        DispatchQueue.main.async { ocrSchedDep = text }
-                                    }
-                                }
-                                if let img = croppedSchedArr {
-                                    ocrText(from: img, label: "SchedArr") { text in
-                                        DispatchQueue.main.async { ocrSchedArr = text }
-                                    }
-                                }
-                                croppedDayDate = cropImage(uiImage, to: dayDateROI)
-                                if let img = croppedDayDate {
-                                    ocrText(from: img, label: "DayDate") { text in
-                                        DispatchQueue.main.async { ocrDayDate = text }
-                                    }
-                                }
-                                
-                                // Time field processing
-                                croppedOutTime = cropImage(uiImage, to: outTimeROI)
-                                croppedOffTime = cropImage(uiImage, to: offTimeROI)
-                                croppedOnTime = cropImage(uiImage, to: onTimeROI)
-                                croppedInTime = cropImage(uiImage, to: inTimeROI)
-                                
-                                if let img = croppedOutTime {
-                                    ocrText(from: img, label: "OutTime") { text in
-                                        DispatchQueue.main.async { ocrOutTime = text }
-                                    }
-                                }
-                                if let img = croppedOffTime {
-                                    ocrText(from: img, label: "OffTime") { text in
-                                        DispatchQueue.main.async { ocrOffTime = text }
-                                    }
-                                }
-                                if let img = croppedOnTime {
-                                    ocrText(from: img, label: "OnTime") { text in
-                                        DispatchQueue.main.async { ocrOnTime = text }
-                                    }
-                                }
-                                if let img = croppedInTime {
-                                    ocrText(from: img, label: "InTime") { text in
-                                        DispatchQueue.main.async { ocrInTime = text }
-                                    }
-                                }
-                                croppedCrewList = cropImage(uiImage, to: crewListROI)
-                                if let img = croppedCrewList {
-                                    ocrText(from: img, label: "CrewList") { text in
-                                        DispatchQueue.main.async { ocrCrewList = text }
+                                // Run OCR on the full image (no cropping yet)
+                                ocrText(from: uiImage, label: "FullImage#\(idx+1)") { text in
+                                    DispatchQueue.main.async {
+                                        print("[DEBUG] OCR result for image #\(idx+1): \(text.prefix(100))...")
+                                        ocrResults.append(text)
+                                        // Classification logic
+                                        let lowerText = text.lowercased()
+                                        let type: String
+                                        if lowerText.contains("cockpit crew") || lowerText.contains("cabin crew") {
+                                            type = "crewList"
+                                            crewListImage = uiImage
+                                        } else if lowerText.contains("fmc & ats") || lowerText.contains("out") || lowerText.contains("dashboard") {
+                                            type = "dashboard"
+                                            dashboardImage = uiImage
+                                        } else {
+                                            type = "unknown"
+                                        }
+                                        imageTypes.append(type)
+                                        print("[DEBUG] Image #\(idx+1) classified as: \(type)")
+                                        // After all images are classified, process ROIs
+                                        if imageTypes.count == newItems.count {
+                                            // If only one image, treat as dashboard and process all ROIs
+                                            if newItems.count == 1, let img = importedImages.first {
+                                                processDashboardROIs(from: img)
+                                                processCrewROIs(from: img)
+                                            } else if newItems.count == 2 {
+                                                // Two images: process dashboard for flight details, crewList for crew
+                                                if let dashImg = dashboardImage {
+                                                    processDashboardROIs(from: dashImg)
+                                                }
+                                                if let crewImg = crewListImage {
+                                                    processCrewROIs(from: crewImg)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             } else {
-                                print("[DEBUG] Failed to load image from picker.")
+                                print("[DEBUG] Failed to load image #\(idx+1) from picker.")
                             }
                         }
                     }
@@ -816,72 +836,30 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         .font(.headline)
                         .foregroundColor(.cyan)
                         .padding(.bottom, 2)
-                    
-
+                
                 } else {
                     Text("Aircraft Registration: Not found")
                         .font(.headline)
                         .foregroundColor(.red)
                         .padding(.bottom, 4)
                 }
-                
-                // Show extracted time values
-                VStack(alignment: .leading, spacing: 4) {
-                    if let outTime = outTime {
-                        Text("OUT Time: \(outTime)")
-                            .font(.subheadline)
-                            .foregroundColor(.red)
-                    }
-                    if let offTime = offTime {
-                        Text("OFF Time: \(offTime)")
-                            .font(.subheadline)
-                            .foregroundColor(.pink)
-                    }
-                    if let onTime = onTime {
-                        Text("ON Time: \(onTime)")
-                            .font(.subheadline)
-                            .foregroundColor(.indigo)
-                    }
-                    if let inTime = inTime {
-                        Text("IN Time: \(inTime)")
-                            .font(.subheadline)
-                            .foregroundColor(.brown)
-                    }
-                }
-                .padding(.bottom, 4)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Crew List (parsed):")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    if crewNamesAndCodes.isEmpty {
-                        Text("No crew detected")
-                            .foregroundColor(.red)
-                    } else {
-                        ForEach(Array(crewNamesAndCodes.enumerated()), id: \ .offset) { idx, pair in
-                            Text("\(pair.name) [\(pair.code)]")
-                                .foregroundColor(.cyan)
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-                .background(Color.black.opacity(0.7))
-                .cornerRadius(8)
+                // Place Export button here
                 Button(action: {
                     exportedJSON = logTenJSON
                     showJSONAlert = true
                 }) {
                     Text("Export as LogTen JSON")
                         .font(.headline)
-                        .padding(10)
-                        .background(Color.blue)
                         .foregroundColor(.white)
+                        .padding()
+                        .background(Color.blue)
                         .cornerRadius(8)
                 }
                 .padding(.bottom, 8)
                 .alert(isPresented: $showJSONAlert) {
                     Alert(title: Text("LogTen JSON Export"), message: Text(exportedJSON), dismissButton: .default(Text("OK")))
                 }
-                // Send to LogTen button
+                // Place Send to LogTen button here (no ScrollView)
                 if flightNumber != nil && aircraftReg != nil && departureAirport != nil && arrivalAirport != nil {
                     Button(action: {
                         if isLogTenProInstalled() {
@@ -901,6 +879,19 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         Alert(title: Text("LogTen Not Installed"), message: Text("LogTen Pro is not installed on this device."), dismissButton: .default(Text("OK")))
                     }
                 }
+                // Crew List (parsed)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Crew List (parsed):")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    ForEach(parsedCrewList, id: \ .self) { crew in
+                        Text(crew)
+                            .foregroundColor(.cyan)
+                    }
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(8)
                 ScrollView {
                     Text("Recognized Text:")
                         .font(.headline)
@@ -954,7 +945,6 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         croppedOffTime = cropImage(uiImage, to: offTimeROI)
                         croppedOnTime = cropImage(uiImage, to: onTimeROI)
                         croppedInTime = cropImage(uiImage, to: inTimeROI)
-                        croppedCrewList = cropImage(uiImage, to: crewListROI)
                         // Run OCR on each cropped region
                         if let img = croppedFlightNumber {
                             ocrText(from: img, label: "FlightNumber") { text in
@@ -1016,11 +1006,6 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                 DispatchQueue.main.async { ocrInTime = text }
                             }
                         }
-                        if let img = croppedCrewList {
-                            ocrText(from: img, label: "CrewList") { text in
-                                DispatchQueue.main.async { ocrCrewList = text }
-                            }
-                        }
                     } else {
                         print("[DEBUG] Failed to create UIImage from data")
                     }
@@ -1068,6 +1053,173 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             } catch {
                 print("[DEBUG] Vision request error: \(error)")
                 DispatchQueue.main.async { isProcessingImage = false }
+            }
+        }
+    }
+    
+    // Helper to update parsedCrewList after all OCRs
+    func updateParsedCrewList(cockpitResults: [(String, String)], cabinResults: [(String, String)]) {
+        let nonEmptyCockpit = cockpitResults.filter { !$0.1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let nonEmptyCabin = cabinResults.filter { !$0.1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        parsedCrewList = []
+        // Cockpit assignment logic
+        if nonEmptyCockpit.count == 4 {
+            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
+            parsedCrewList.append("Relief: \(nonEmptyCockpit[1].1)")
+            parsedCrewList.append("SIC: \(nonEmptyCockpit[2].1)")
+            parsedCrewList.append("Relief2: \(nonEmptyCockpit[3].1)")
+        } else if nonEmptyCockpit.count == 3 {
+            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
+            parsedCrewList.append("SIC: \(nonEmptyCockpit[1].1)")
+            parsedCrewList.append("Relief2: \(nonEmptyCockpit[2].1)")
+        } else if nonEmptyCockpit.count == 2 {
+            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
+            parsedCrewList.append("SIC: \(nonEmptyCockpit[1].1)")
+        } else {
+            for (role, text) in nonEmptyCockpit {
+                parsedCrewList.append("\(role): \(text)")
+            }
+        }
+        // Cabin crew assignment (append after cockpit)
+        for (role, text) in nonEmptyCabin {
+            parsedCrewList.append("\(role): \(text)")
+        }
+    }
+    
+    // Helper: process all flight detail ROIs from dashboard image
+    func processDashboardROIs(from uiImage: UIImage) {
+        croppedFlightNumber = cropImage(uiImage, to: flightNumberROI)
+        croppedAircraftType = cropImage(uiImage, to: aircraftTypeROI)
+        croppedAircraftReg  = cropImage(uiImage, to: aircraftRegROI)
+        croppedDeparture = cropImage(uiImage, to: departureROI)
+        croppedArrival = cropImage(uiImage, to: arrivalROI)
+        croppedSchedDep = cropImage(uiImage, to: schedDepROI)
+        croppedSchedArr = cropImage(uiImage, to: schedArrROI)
+        croppedDayDate = cropImage(uiImage, to: dayDateROI)
+        croppedOutTime = cropImage(uiImage, to: outTimeROI)
+        croppedOffTime = cropImage(uiImage, to: offTimeROI)
+        croppedOnTime = cropImage(uiImage, to: onTimeROI)
+        croppedInTime = cropImage(uiImage, to: inTimeROI)
+        // Run OCR on each cropped region
+        if let img = croppedFlightNumber {
+            ocrText(from: img, label: "FlightNumber") { text in
+                DispatchQueue.main.async { ocrFlightNumber = text }
+            }
+        }
+        if let img = croppedAircraftType {
+            ocrText(from: img, label: "AircraftType") { text in
+                DispatchQueue.main.async { ocrAircraftType = text }
+            }
+        }
+        if let img = croppedAircraftReg {
+            ocrText(from: img, label: "AircraftReg") { text in
+                DispatchQueue.main.async { ocrAircraftReg = text }
+            }
+        }
+        if let img = croppedDeparture {
+            ocrText(from: img, label: "Departure") { text in
+                DispatchQueue.main.async { ocrDeparture = text }
+            }
+        }
+        if let img = croppedArrival {
+            ocrText(from: img, label: "Arrival") { text in
+                DispatchQueue.main.async { ocrArrival = text }
+            }
+        }
+        if let img = croppedSchedDep {
+            ocrText(from: img, label: "SchedDep") { text in
+                DispatchQueue.main.async { ocrSchedDep = text }
+            }
+        }
+        if let img = croppedSchedArr {
+            ocrText(from: img, label: "SchedArr") { text in
+                DispatchQueue.main.async { ocrSchedArr = text }
+            }
+        }
+        if let img = croppedDayDate {
+            ocrText(from: img, label: "DayDate") { text in
+                DispatchQueue.main.async { ocrDayDate = text }
+            }
+        }
+        if let img = croppedOutTime {
+            ocrText(from: img, label: "OutTime") { text in
+                DispatchQueue.main.async { ocrOutTime = text }
+            }
+        }
+        if let img = croppedOffTime {
+            ocrText(from: img, label: "OffTime") { text in
+                DispatchQueue.main.async { ocrOffTime = text }
+            }
+        }
+        if let img = croppedOnTime {
+            ocrText(from: img, label: "OnTime") { text in
+                DispatchQueue.main.async { ocrOnTime = text }
+            }
+        }
+        if let img = croppedInTime {
+            ocrText(from: img, label: "InTime") { text in
+                DispatchQueue.main.async { ocrInTime = text }
+            }
+        }
+    }
+    
+    // Helper: process all crew ROIs from crew image
+    func processCrewROIs(from uiImage: UIImage) {
+        // Cockpit crew logic: OCR all 4, then assign roles after all are done
+        let cockpitROIs: [(String, FieldROI)] = [
+            ("Commander", commanderROI),
+            ("Relief", reliefROI),
+            ("SIC", sicROI),
+            ("Relief2", relief2ROI)
+        ]
+        // Cabin crew ROIs and roles
+        let cabinROIs: [(String, FieldROI)] = [
+            ("Custom5_FP", crewCustom1ROI),   // FP role (Charmaine Fong)
+            ("Custom1_ISM", crewCustom2ROI),  // ISM role (Aries Yip)
+            ("Custom4_SP", crewCustom4ROI),   // SP role (Christie Leung)
+            ("FlightAttendant", crewFlightAttendantROI),    // Primary FA (Michelle Liu)
+            ("FlightAttendant2", crewFlightAttendant2ROI),  // FA2 (Venus Siu)
+            ("FlightAttendant3", crewFlightAttendant3ROI),  // FA3 (Charlie Hui)
+            ("FlightAttendant4", crewFlightAttendant4ROI)   // FA4 (Edmund Leung)
+        ]
+        var cockpitResults: [(String, String)] = Array(repeating: ("", ""), count: 4)
+        var cabinResults: [(String, String)] = Array(repeating: ("", ""), count: cabinROIs.count)
+        var completed = 0
+        let totalToComplete = 4 + cabinROIs.count
+        // Cockpit crew OCR
+        for i in 0..<4 {
+            let (role, roi) = cockpitROIs[i]
+            if let cropped = cropImage(uiImage, to: roi) {
+                ocrText(from: cropped, label: "Crew_\(role)_ROI") { crewText in
+                    DispatchQueue.main.async {
+                        cockpitResults[i] = (role, crewText)
+                        completed += 1
+                        if completed == totalToComplete {
+                            updateParsedCrewList(cockpitResults: cockpitResults, cabinResults: cabinResults)
+                        }
+                    }
+                }
+            } else {
+                print("[DEBUG] Failed to crop ROI for \(role) on crew image")
+                completed += 1
+            }
+        }
+        // Cabin crew OCR
+        for i in 0..<cabinROIs.count {
+            let (role, roi) = cabinROIs[i]
+            if let cropped = cropImage(uiImage, to: roi) {
+                ocrText(from: cropped, label: "Crew_\(role)_ROI") { crewText in
+                    DispatchQueue.main.async {
+                        cabinResults[i] = (role, crewText)
+                        completed += 1
+                        if completed == totalToComplete {
+                            updateParsedCrewList(cockpitResults: cockpitResults, cabinResults: cabinResults)
+                        }
+                    }
+                }
+            } else {
+                print("[DEBUG] Failed to crop ROI for \(role) on crew image")
+                completed += 1
             }
         }
     }
