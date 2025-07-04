@@ -6,7 +6,7 @@ struct FlightEntity: Codable {
     var entity_name: String = "Flight"
     var flight_flightDate: String? = nil
     var flight_number: String? = nil
-    var flight_aircraftID: String? = nil
+
     var flight_selectedAircraftType: String? = nil
     var flight_from: String? = nil
     var flight_to: String? = nil

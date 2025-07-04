@@ -68,4 +68,73 @@ func extractAircraftType(from recognizedText: String) -> String? {
 func testExtractAircraftType() {
     let sample = "Aircraft Type: A359, Reg: BLRU, Registration: N123AB, G-ABCD"
     print(extractAircraftType(from: sample) ?? "Not found")
+}
+
+/// Extracts the OUT time from recognized text.
+func extractOutTime(from recognizedText: String) -> String? {
+    // Look for time patterns like HHMMz, HH:MMz, HHMM, or HH:MM
+    let timePattern = "\\b([0-9]{1,2}[:]?[0-9]{2})[zZ]?\\b"
+    if let regex = try? NSRegularExpression(pattern: timePattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let timeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[timeRange])
+        }
+    }
+    return nil
+}
+
+/// Extracts the OFF time from recognized text.
+func extractOffTime(from recognizedText: String) -> String? {
+    // Look for time patterns like HHMMz, HH:MMz, HHMM, or HH:MM
+    let timePattern = "\\b([0-9]{1,2}[:]?[0-9]{2})[zZ]?\\b"
+    if let regex = try? NSRegularExpression(pattern: timePattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let timeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[timeRange])
+        }
+    }
+    return nil
+}
+
+/// Extracts the ON time from recognized text.
+func extractOnTime(from recognizedText: String) -> String? {
+    // Look for time patterns like HHMMz, HH:MMz, HHMM, or HH:MM
+    let timePattern = "\\b([0-9]{1,2}[:]?[0-9]{2})[zZ]?\\b"
+    if let regex = try? NSRegularExpression(pattern: timePattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let timeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[timeRange])
+        }
+    }
+    return nil
+}
+
+/// Extracts the IN time from recognized text.
+func extractInTime(from recognizedText: String) -> String? {
+    // Look for time patterns like HHMMz, HH:MMz, HHMM, or HH:MM
+    let timePattern = "\\b([0-9]{1,2}[:]?[0-9]{2})[zZ]?\\b"
+    if let regex = try? NSRegularExpression(pattern: timePattern) {
+        let range = NSRange(recognizedText.startIndex..., in: recognizedText)
+        if let match = regex.firstMatch(in: recognizedText, options: [], range: range),
+           let timeRange = Range(match.range(at: 1), in: recognizedText) {
+            return String(recognizedText[timeRange])
+        }
+    }
+    return nil
+}
+
+// Example test functions for time extraction
+func testExtractTimes() {
+    let outSample = "OUT 18:35"
+    let offSample = "OFF 18:42"
+    let onSample = "ON 03:15"
+    let inSample = "IN 03:22"
+    
+    print("OUT: \(extractOutTime(from: outSample) ?? "Not found")")
+    print("OFF: \(extractOffTime(from: offSample) ?? "Not found")")
+    print("ON: \(extractOnTime(from: onSample) ?? "Not found")")
+    print("IN: \(extractInTime(from: inSample) ?? "Not found")")
 } 

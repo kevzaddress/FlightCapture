@@ -10,6 +10,9 @@ import AVFoundation
 import Vision
 import UIKit
 import PhotosUI
+import Foundation
+import UniformTypeIdentifiers
+import CryptoKit
 
 // Import the extraction function
 // (Assume FieldExtraction.swift is in the same module)
@@ -194,6 +197,16 @@ struct ContentView: View {
     @State private var ocrSchedArr: String = ""
     @State private var croppedDayDate: UIImage? = nil
     @State private var ocrDayDate: String = ""
+    
+    // Time state variables
+    @State private var croppedOutTime: UIImage? = nil
+    @State private var croppedOffTime: UIImage? = nil
+    @State private var croppedOnTime: UIImage? = nil
+    @State private var croppedInTime: UIImage? = nil
+    @State private var ocrOutTime: String = ""
+    @State private var ocrOffTime: String = ""
+    @State private var ocrOnTime: String = ""
+    @State private var ocrInTime: String = ""
     // Day and Date: top-left (480, 56), bottom-right (543, 130)
     let dayDateROI = FieldROI(x: 480/2360, y: 56/1640, width: (543-480)/2360, height: (130-56)/1640)
     // Use OCR values if screenshot is imported, otherwise fallback to regex extraction
@@ -201,20 +214,29 @@ struct ContentView: View {
         importedImage != nil ? ocrFlightNumber.trimmingCharacters(in: .whitespacesAndNewlines) : extractFlightNumber(from: recognizedText)
     }
     var departureAirport: String? {
-        importedImage != nil ? extractICAOCode(ocrDeparture) : nil
+        importedImage != nil ? ocrDeparture.trimmingCharacters(in: .whitespacesAndNewlines) : extractFlightNumber(from: recognizedText)
     }
     var arrivalAirport: String? {
-        importedImage != nil ? extractICAOCode(ocrArrival) : nil
+        importedImage != nil ? ocrArrival.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
-    var aircraftReg: String? {
-        let reg = importedImage != nil ? extractRegFromOCR(ocrAircraftReg) : extractAircraftRegistration(from: recognizedText)
-        guard let reg = reg else { return nil }
-        // Format: If starts with 'B' and not already 'B-', insert hyphen after B
-        if reg.count == 5, reg.hasPrefix("B"), !reg.hasPrefix("B-") {
-            let index = reg.index(reg.startIndex, offsetBy: 1)
-            return "B-" + reg[index...]
+    // Helper to normalize aircraft registration (e.g., BLRU -> B-LRU)
+    func normalizeAircraftReg(_ reg: String?) -> String? {
+        guard let reg = reg?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !reg.isEmpty else { return nil }
+        // Already normalized (B-xxxx)
+        if reg.hasPrefix("B-") && reg.count == 5 { return reg }
+        // 4-char (BLRU) or 5-char (B1234) starting with B, not already B-
+        if reg.count == 4 && reg.hasPrefix("B") {
+            let suffix = reg.dropFirst()
+            return "B-" + suffix
+        }
+        if reg.count == 5 && reg.hasPrefix("B") && !reg.hasPrefix("B-") {
+            let suffix = reg.dropFirst()
+            return "B-" + suffix
         }
         return reg
+    }
+    var aircraftReg: String? {
+        return normalizeAircraftReg(importedImage != nil ? ocrAircraftReg : extractAircraftRegistration(from: recognizedText))
     }
     // Helper to extract ICAO airport code from OCR string (e.g., "OERK, RUH" -> "OERK")
     func extractICAOCode(_ text: String) -> String? {
@@ -244,42 +266,68 @@ struct ContentView: View {
         return nil
     }
     // Calibrated ROIs for 2360x1640 screenshots (from user)
-    // Departure Airport: top-left (552, 56), bottom-right (641, 130)
-    let departureROI = FieldROI(x: 552/2360, y: 56/1640, width: (641-552)/2360, height: (130-56)/1640)
-    // Arrival Airport: top-left (807, 56), bottom-right (894, 130)
-    let arrivalROI = FieldROI(x: 807/2360, y: 56/1640, width: (894-807)/2360, height: (130-56)/1640)
-    // Scheduled Departure Time: top-left (647, 56), bottom-right (750, 130)
-    let schedDepROI = FieldROI(x: 647/2360, y: 56/1640, width: (750-647)/2360, height: (130-56)/1640)
-    // Scheduled Arrival Time: top-left (900, 56), bottom-right (1026, 130)
-    let schedArrROI = FieldROI(x: 900/2360, y: 56/1640, width: (1026-900)/2360, height: (130-56)/1640)
-    // Helper to extract Zulu time (e.g., "1835Z, 2135L" -> "1835Z")
-    func extractZuluTime(_ text: String) -> String? {
+    // Departure Airport: top-left (560, 60), bottom-right (641, 96)
+    let departureROI = FieldROI(x: 560/2360, y: 60/1640, width: (641-560)/2360, height: (96-60)/1640)
+    // Arrival Airport: top-left (807, 60), bottom-right (894, 96)
+    let arrivalROI = FieldROI(x: 807/2360, y: 60/1640, width: (894-807)/2360, height: (96-60)/1640)
+    // Scheduled Departure Time: top-left (647, 60), bottom-right (750, 96)
+    let schedDepROI = FieldROI(x: 647/2360, y: 60/1640, width: (750-647)/2360, height: (96-60)/1640)
+    // Scheduled Arrival Time: top-left (900, 60), bottom-right (1026, 96)
+    let schedArrROI = FieldROI(x: 900/2360, y: 60/1640, width: (1026-900)/2360, height: (96-60)/1640)
+    // AircraftReg: top-left (247, 258), bottom-right (330, 290)
+    let aircraftRegROI = FieldROI(x: 247/2360, y: 258/1640, width: (330-247)/2360, height: (290-258)/1640)
+
+// Time ROIs for OUT-OFF-ON-IN (adjusted to capture only time values, not labels)
+let outTimeROI = FieldROI(x: 1970/2360, y: 1128/1640, width: (2055-1970)/2360, height: (1166-1128)/1640)
+let offTimeROI = FieldROI(x: 1970/2360, y: 1170/1640, width: (2055-1970)/2360, height: (1208-1170)/1640)
+let onTimeROI = FieldROI(x: 1970/2360, y: 1230/1640, width: (2055-1970)/2360, height: (1270-1230)/1640)
+let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, height: (1305-1270)/1640)
+    // Helper to extract Zulu time and check for +1 day indicator
+    func extractZuluTime(_ text: String) -> (time: String?, isNextDay: Bool) {
         let parts = text.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         for part in parts {
             if let match = part.range(of: "^[0-9]{4}Z(\\+1)?$", options: .regularExpression) {
-                // Remove +1 if present
                 var zulu = String(part[match])
-                if zulu.hasSuffix("+1") {
+                let isNextDay = zulu.hasSuffix("+1")
+                if isNextDay {
                     zulu = String(zulu.dropLast(2))
                 }
-                return zulu
+                return (zulu, isNextDay)
             }
         }
         // fallback: just return the first part, stripped of +1 if present
         if let first = parts.first {
             var zulu = first
-            if zulu.hasSuffix("+1") {
+            let isNextDay = zulu.hasSuffix("+1")
+            if isNextDay {
                 zulu = String(zulu.dropLast(2))
             }
-            return zulu
+            return (zulu, isNextDay)
         }
-        return nil
+        return (nil, false)
     }
     var scheduledDepartureZulu: String? {
-        importedImage != nil ? extractZuluTime(ocrSchedDep) : nil
+        importedImage != nil ? extractZuluTime(ocrSchedDep).time : nil
     }
     var scheduledArrivalZulu: String? {
-        importedImage != nil ? extractZuluTime(ocrSchedArr) : nil
+        importedImage != nil ? extractZuluTime(ocrSchedArr).time : nil
+    }
+    
+    // Time field computed properties
+    var outTime: String? {
+        importedImage != nil ? extractOutTime(from: ocrOutTime) : nil
+    }
+    
+    var offTime: String? {
+        importedImage != nil ? extractOffTime(from: ocrOffTime) : nil
+    }
+    
+    var onTime: String? {
+        importedImage != nil ? extractOnTime(from: ocrOnTime) : nil
+    }
+    
+    var inTime: String? {
+        importedImage != nil ? extractInTime(from: ocrInTime) : nil
     }
     // Helper to infer the full date from OCR day-of-week and day-of-month
     func inferDate(dayOfWeek: String, dayOfMonth: Int, today: Date = Date()) -> Date? {
@@ -316,11 +364,19 @@ struct ContentView: View {
     // Helper to format scheduled time as dd/MM/yyyy HH:mm for LogTen
     func formatScheduledTime(ocrTime: String, fallback: String) -> String {
         guard let date = inferredDate else { return fallback }
-        // Extract Zulu time (e.g., 1835Z)
-        guard let zulu = extractZuluTime(ocrTime), zulu.count >= 5 else { return fallback }
+        // Extract Zulu time and check for +1 day indicator
+        let (zulu, isNextDay) = extractZuluTime(ocrTime)
+        guard let zulu = zulu, zulu.count >= 5 else { return fallback }
+        
         let hour = Int(zulu.prefix(2)) ?? 0
         let minute = Int(zulu.dropFirst(2).prefix(2)) ?? 0
         var comps = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        
+        // Add one day if +1 indicator is present
+        if isNextDay {
+            comps.day = (comps.day ?? 1) + 1
+        }
+        
         comps.hour = hour
         comps.minute = minute
         comps.second = 0
@@ -329,31 +385,76 @@ struct ContentView: View {
         formatter.dateFormat = "dd/MM/yyyy HH:mm"
         return formatter.string(from: fullDate)
     }
-    // Assemble LogTen-compatible JSON with metadata and required fields
+    
+    // Helper function to format actual times with full date-time
+    func formatActualTime(ocrTime: String?, scheduledTime: String) -> String? {
+        guard let ocrTime = ocrTime else { return nil }
+        
+        // Extract the date from the scheduled time (e.g., "30/06/2025 18:35")
+        let scheduledComponents = scheduledTime.components(separatedBy: " ")
+        guard scheduledComponents.count >= 2 else { return ocrTime }
+        
+        let datePart = scheduledComponents[0] // "30/06/2025"
+        let timePart = ocrTime // "1852" or "1852z"
+        
+        // Remove 'z' or 'Z' from time if present
+        let cleanTime = timePart.replacingOccurrences(of: "[zZ]", with: "", options: .regularExpression)
+        
+        // Format as HH:mm
+        if cleanTime.count == 4 {
+            let hour = String(cleanTime.prefix(2))
+            let minute = String(cleanTime.suffix(2))
+            let formattedTime = "\(hour):\(minute)"
+            
+            // Combine date and time
+            return "\(datePart) \(formattedTime)"
+        }
+        
+        return ocrTime
+    }
+
+    // Update logTenJSON to use all available aircraft info fields
     var logTenJSON: String {
-        let flightKey = "RB_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let now = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "dd/MM/yyyy"
+        let dateString = dateFormatter.string(from: now)
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm"
-        let dateString = dateFormatter.string(from: now)
         let timeString = timeFormatter.string(from: now)
         // Use inferred date + OCR time if possible, else fallback
         let scheduledDeparture = formatScheduledTime(ocrTime: ocrSchedDep, fallback: "\(dateString) \(timeString)")
         let scheduledArrival = formatScheduledTime(ocrTime: ocrSchedArr, fallback: "\(dateString) \(timeString)")
-        let entity: [String: Any?] = [
+        let flightKey = generateFlightKey(
+            date: scheduledDeparture.components(separatedBy: " ").first ?? dateString, // dd/MM/yyyy
+            flightNumber: flightNumber ?? "TEST123",
+            from: departureAirport ?? "VHHH",
+            to: arrivalAirport ?? "OERK"
+        )
+        print("[DEBUG] Generated flight_key: \(flightKey)")
+        
+        let aircraftID = normalizeAircraftReg(importedImage != nil ? ocrAircraftReg : extractAircraftRegistration(from: recognizedText)) ?? "B-TEST"
+        print("[DEBUG] Normalized Aircraft ID for export: \(aircraftID)")
+        
+        // Use flightKey in the exported entity
+        let flightEntity: [String: Any?] = [
             "entity_name": "Flight",
-            "flight_flightNumber": flightNumber ?? "TEST123",
-            "flight_aircraftID": aircraftReg ?? "B-TEST",
+            "flight_key": flightKey,
+            "flight_flightNumber": flightNumber,
             "flight_from": departureAirport ?? "VHHH",
             "flight_to": arrivalAirport ?? "OERK",
             "flight_scheduledDepartureTime": scheduledDeparture,
             "flight_scheduledArrivalTime": scheduledArrival,
+            "flight_selectedAircraftID": aircraftID,
             "flight_type": 0,
-            "flight_key": flightKey,
-            "flight_customNote1": "\(departureAirport ?? "VHHH") - \(arrivalAirport ?? "OERK") \(flightNumber ?? "TEST123")"
+            "flight_customNote1": "\(departureAirport ?? "VHHH") - \(arrivalAirport ?? "OERK") \(flightNumber ?? "TEST123")",
+            // Add actual times if available (with full date-time format)
+            "flight_actualDepartureTime": formatActualTime(ocrTime: outTime, scheduledTime: scheduledDeparture),
+            "flight_takeoffTime": formatActualTime(ocrTime: offTime, scheduledTime: scheduledDeparture),
+            "flight_landingTime": formatActualTime(ocrTime: onTime, scheduledTime: scheduledArrival),
+            "flight_actualArrivalTime": formatActualTime(ocrTime: inTime, scheduledTime: scheduledArrival)
         ]
+        
         let metadata: [String: Any] = [
             "application": "FlightCapture",
             "version": "1.0",
@@ -363,10 +464,12 @@ struct ContentView: View {
             "numberOfEntities": 1,
             "timesAreZulu": true
         ]
+        
         let payload: [String: Any] = [
             "metadata": metadata,
-            "entities": [entity.compactMapValues { $0 }]
+            "entities": [flightEntity.compactMapValues { $0 }]
         ]
+        
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: .prettyPrinted),
            let jsonString = String(data: data, encoding: .utf8) {
             return jsonString
@@ -495,6 +598,33 @@ struct ContentView: View {
                                         DispatchQueue.main.async { ocrDayDate = text }
                                     }
                                 }
+                                
+                                // Time field processing
+                                croppedOutTime = cropImage(uiImage, to: outTimeROI)
+                                croppedOffTime = cropImage(uiImage, to: offTimeROI)
+                                croppedOnTime = cropImage(uiImage, to: onTimeROI)
+                                croppedInTime = cropImage(uiImage, to: inTimeROI)
+                                
+                                if let img = croppedOutTime {
+                                    ocrText(from: img, label: "OutTime") { text in
+                                        DispatchQueue.main.async { ocrOutTime = text }
+                                    }
+                                }
+                                if let img = croppedOffTime {
+                                    ocrText(from: img, label: "OffTime") { text in
+                                        DispatchQueue.main.async { ocrOffTime = text }
+                                    }
+                                }
+                                if let img = croppedOnTime {
+                                    ocrText(from: img, label: "OnTime") { text in
+                                        DispatchQueue.main.async { ocrOnTime = text }
+                                    }
+                                }
+                                if let img = croppedInTime {
+                                    ocrText(from: img, label: "InTime") { text in
+                                        DispatchQueue.main.async { ocrInTime = text }
+                                    }
+                                }
                             } else {
                                 print("[DEBUG] Failed to load image from picker.")
                             }
@@ -602,6 +732,57 @@ struct ContentView: View {
                         }
                     }
                 }
+                // Time field debug previews
+                HStack {
+                    if let croppedOutTime = croppedOutTime {
+                        VStack {
+                            Text("OUT Time ROI")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            Image(uiImage: croppedOutTime)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 40)
+                                .border(Color.red, width: 2)
+                        }
+                    }
+                    if let croppedOffTime = croppedOffTime {
+                        VStack {
+                            Text("OFF Time ROI")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            Image(uiImage: croppedOffTime)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 40)
+                                .border(Color.pink, width: 2)
+                        }
+                    }
+                    if let croppedOnTime = croppedOnTime {
+                        VStack {
+                            Text("ON Time ROI")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            Image(uiImage: croppedOnTime)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 40)
+                                .border(Color.indigo, width: 2)
+                        }
+                    }
+                    if let croppedInTime = croppedInTime {
+                        VStack {
+                            Text("IN Time ROI")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            Image(uiImage: croppedInTime)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 40)
+                                .border(Color.brown, width: 2)
+                        }
+                    }
+                }
                 // Show OCR results for each field
                 VStack(alignment: .leading) {
                     Text("Flight Number OCR: \(ocrFlightNumber)")
@@ -618,6 +799,14 @@ struct ContentView: View {
                         .foregroundColor(.mint)
                     Text("Sched Arr OCR: \(ocrSchedArr)")
                         .foregroundColor(.teal)
+                    Text("OUT Time OCR: \(ocrOutTime)")
+                        .foregroundColor(.red)
+                    Text("OFF Time OCR: \(ocrOffTime)")
+                        .foregroundColor(.pink)
+                    Text("ON Time OCR: \(ocrOnTime)")
+                        .foregroundColor(.indigo)
+                    Text("IN Time OCR: \(ocrInTime)")
+                        .foregroundColor(.brown)
                 }
                 .padding(.vertical, 4)
                 // Show extracted flight number/type/reg from OCR or regex
@@ -658,13 +847,40 @@ struct ContentView: View {
                     Text("Aircraft Registration: \(aircraftReg)")
                         .font(.headline)
                         .foregroundColor(.cyan)
-                        .padding(.bottom, 4)
+                        .padding(.bottom, 2)
+                    
+
                 } else {
                     Text("Aircraft Registration: Not found")
                         .font(.headline)
                         .foregroundColor(.red)
                         .padding(.bottom, 4)
                 }
+                
+                // Show extracted time values
+                VStack(alignment: .leading, spacing: 4) {
+                    if let outTime = outTime {
+                        Text("OUT Time: \(outTime)")
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                    }
+                    if let offTime = offTime {
+                        Text("OFF Time: \(offTime)")
+                            .font(.subheadline)
+                            .foregroundColor(.pink)
+                    }
+                    if let onTime = onTime {
+                        Text("ON Time: \(onTime)")
+                            .font(.subheadline)
+                            .foregroundColor(.indigo)
+                    }
+                    if let inTime = inTime {
+                        Text("IN Time: \(inTime)")
+                            .font(.subheadline)
+                            .foregroundColor(.brown)
+                    }
+                }
+                .padding(.bottom, 4)
                 Button(action: {
                     exportedJSON = logTenJSON
                     showJSONAlert = true
@@ -773,6 +989,13 @@ struct ContentView: View {
             }
         }
     }
+}
+
+// Generate a robust, deterministic flight_key using date, flight number, from, and to
+func generateFlightKey(date: String, flightNumber: String, from: String, to: String) -> String {
+    let base = "\(date)_\(flightNumber)_\(from)_\(to)"
+    let hash = SHA256.hash(data: Data(base.utf8))
+    return "FC_" + hash.compactMap { String(format: "%02x", $0) }.joined().prefix(16)
 }
 
 #Preview {
