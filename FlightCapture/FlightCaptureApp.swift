@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct FlightCaptureApp: App {
+    @State private var incomingImageURL: URL?
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(incomingImageURL: $incomingImageURL)
+                .onOpenURL { url in
+                    incomingImageURL = url
+                }
         }
     }
 }

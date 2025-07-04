@@ -80,100 +80,8 @@ func ocrText(from image: UIImage, label: String, completion: @escaping (String) 
     }
 }
 
-struct CameraView: UIViewRepresentable {
-    @Binding var recognizedText: String
-    
-    class CameraCoordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, ObservableObject {
-        var parent: CameraView
-        let session = AVCaptureSession()
-        let videoOutput = AVCaptureVideoDataOutput()
-        let queue = DispatchQueue(label: "camera.frame.processing")
-        let visionQueue = DispatchQueue(label: "vision.ocr.queue")
-        @Published var recognizedText: String = ""
-        
-        init(parent: CameraView) {
-            self.parent = parent
-            super.init()
-            setupSession()
-        }
-        
-        private func setupSession() {
-            session.beginConfiguration()
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-                  let input = try? AVCaptureDeviceInput(device: device) else {
-                print("Failed to setup camera input")
-                return
-            }
-            
-            if session.canAddInput(input) {
-                session.addInput(input)
-            }
-            
-            videoOutput.setSampleBufferDelegate(self, queue: queue)
-            videoOutput.alwaysDiscardsLateVideoFrames = true
-            if session.canAddOutput(videoOutput) {
-                session.addOutput(videoOutput)
-            }
-            
-            session.commitConfiguration()
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.session.startRunning()
-            }
-        }
-        
-        func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-            
-            let request = VNRecognizeTextRequest { [weak self] (request, error) in
-                if let error = error {
-                    print("Vision error: \(error)")
-                    return
-                }
-                
-                guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-                let recognizedStrings = observations.compactMap { $0.topCandidates(1).first?.string }
-                let text = recognizedStrings.joined(separator: ", ")
-                
-                DispatchQueue.main.async {
-                    self?.recognizedText = text
-                    self?.parent.recognizedText = text
-                }
-            }
-            
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            
-            let requestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-            visionQueue.async {
-                do {
-                    try requestHandler.perform([request])
-                } catch {
-                    print("Vision request error: \(error)")
-                }
-            }
-        }
-    }
-    
-    func makeCoordinator() -> CameraCoordinator {
-        CameraCoordinator(parent: self)
-    }
-    
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
-        let previewLayer = AVCaptureVideoPreviewLayer(session: context.coordinator.session)
-        previewLayer.frame = view.frame
-        previewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(previewLayer)
-        return view
-    }
-    
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // Update binding
-        context.coordinator.parent = self
-    }
-}
-
 struct ContentView: View {
+    @Binding var incomingImageURL: URL?
     @State private var recognizedText: String = ""
     @State private var showJSONAlert = false
     @State private var exportedJSON = ""
@@ -435,7 +343,23 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         
         let aircraftID = normalizeAircraftReg(importedImage != nil ? ocrAircraftReg : extractAircraftRegistration(from: recognizedText)) ?? "B-TEST"
         print("[DEBUG] Normalized Aircraft ID for export: \(aircraftID)")
-        
+
+        // Crew mapping logic
+        var crewFields: [String: String] = [:]
+        if crewNamesAndCodes.count > 0 {
+            crewFields["flight_selectedCrewCommander"] = crewNamesAndCodes[0].name
+        }
+        if crewNamesAndCodes.count > 1 {
+            crewFields["flight_selectedCrewSIC"] = crewNamesAndCodes[1].name
+        }
+        if crewNamesAndCodes.count == 3 {
+            crewFields["flight_selectedCrewRelief2"] = crewNamesAndCodes[2].name
+        }
+        if crewNamesAndCodes.count == 4 {
+            crewFields["flight_selectedCrewRelief"] = crewNamesAndCodes[2].name
+            crewFields["flight_selectedCrewRelief2"] = crewNamesAndCodes[3].name
+        }
+
         // Use flightKey in the exported entity
         let flightEntity: [String: Any?] = [
             "entity_name": "Flight",
@@ -453,7 +377,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             "flight_takeoffTime": formatActualTime(ocrTime: offTime, scheduledTime: scheduledDeparture),
             "flight_landingTime": formatActualTime(ocrTime: onTime, scheduledTime: scheduledArrival),
             "flight_actualArrivalTime": formatActualTime(ocrTime: inTime, scheduledTime: scheduledArrival)
-        ]
+        ].merging(crewFields) { $1 }
         
         let metadata: [String: Any] = [
             "application": "FlightCapture",
@@ -520,17 +444,55 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         showLogTenAlert = true
     }
     
+    // Crew list ROI: top-left (26, 1205), bottom-right (460, 1395)
+    let crewListROI = FieldROI(x: 26/2360, y: 1205/1640, width: (460-26)/2360, height: (1395-1205)/1640)
+
+    @State private var croppedCrewList: UIImage? = nil
+    @State private var ocrCrewList: String = ""
+    // Helper to title-case a name (first letter of each word uppercase, rest lowercase)
+    func titleCase(_ name: String) -> String {
+        return name
+            .split(separator: " ")
+            .map { word in
+                guard let first = word.first else { return "" }
+                return String(first).uppercased() + word.dropFirst().lowercased()
+            }
+            .joined(separator: " ")
+    }
+    var crewNamesAndCodes: [(name: String, code: String)] {
+        // Split by comma, trim, filter empty
+        let items = ocrCrewList
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            // Remove all bullet and dot characters (• · ● ▪️ and similar)
+            .map { $0.replacingOccurrences(of: "[\u{2022}\u{00b7}\u{25cf}\u{25aa}\u{fe0f}\u{2024}\u{2219}\u{2027}]", with: "", options: .regularExpression) }
+            .map { $0.replacingOccurrences(of: "[^A-Za-z0-9 -]", with: "", options: .regularExpression) } // Remove extraneous except space and hyphen
+        // Heuristic: codes are always at the end, one per name
+        let codePattern = "^[0-9E]-[A-Z]{2}$"
+        let codeCount = items.filter { $0.range(of: codePattern, options: .regularExpression) != nil }.count
+        let nameCount = items.count - codeCount
+        guard nameCount > 0, codeCount > 0, nameCount == codeCount else {
+            // fallback: just return names, no codes, title-case names
+            return items.map { (titleCase($0), "") }
+        }
+        let names = Array(items.prefix(nameCount)).map { titleCase($0) }
+        let codes = Array(items.suffix(codeCount)).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return zip(names, codes).map { ($0, $1) }
+    }
+    
     var body: some View {
         ZStack(alignment: .bottom) {
-            CameraView(recognizedText: $recognizedText)
-                .edgesIgnoringSafeArea(.all)
+            // CameraView(recognizedText: $recognizedText)
+            //     .edgesIgnoringSafeArea(.all)
             VStack {
                 Spacer()
-                Text("Live Camera Feed")
-                    .padding(8)
-                    .background(Color.black.opacity(0.5))
+                Text("Import Screenshot")
+                    .font(.headline)
+                    .padding(10)
+                    .background(Color.purple)
                     .foregroundColor(.white)
-                    .cornerRadius(10)
+                    .cornerRadius(8)
                 PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
                     Text("Import Screenshot")
                         .font(.headline)
@@ -539,7 +501,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         .foregroundColor(.white)
                         .cornerRadius(8)
                 }
-                .onChange(of: selectedPhoto, initial: false) { oldValue, newItem in
+                .onChange(of: selectedPhoto, initial: false) { _, newItem in
                     print("[DEBUG] User selected a photo: \(String(describing: newItem))")
                     if let newItem = newItem {
                         Task {
@@ -623,6 +585,12 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                 if let img = croppedInTime {
                                     ocrText(from: img, label: "InTime") { text in
                                         DispatchQueue.main.async { ocrInTime = text }
+                                    }
+                                }
+                                croppedCrewList = cropImage(uiImage, to: crewListROI)
+                                if let img = croppedCrewList {
+                                    ocrText(from: img, label: "CrewList") { text in
+                                        DispatchQueue.main.async { ocrCrewList = text }
                                     }
                                 }
                             } else {
@@ -881,6 +849,23 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     }
                 }
                 .padding(.bottom, 4)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Crew List (parsed):")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    if crewNamesAndCodes.isEmpty {
+                        Text("No crew detected")
+                            .foregroundColor(.red)
+                    } else {
+                        ForEach(Array(crewNamesAndCodes.enumerated()), id: \ .offset) { idx, pair in
+                            Text("\(pair.name) [\(pair.code)]")
+                                .foregroundColor(.cyan)
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(8)
                 Button(action: {
                     exportedJSON = logTenJSON
                     showJSONAlert = true
@@ -947,6 +932,103 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             }
             .padding(.horizontal)
         }
+        .onChange(of: incomingImageURL, initial: false) { _, newURL in
+            print("[DEBUG] onChange incomingImageURL: \(String(describing: newURL))")
+            if let url = newURL {
+                do {
+                    let data = try Data(contentsOf: url)
+                    print("[DEBUG] Loaded data from URL: \(url), size: \(data.count) bytes")
+                    if let uiImage = UIImage(data: data) {
+                        print("[DEBUG] Created UIImage from data")
+                        importedImage = uiImage
+                        // Crop to ROIs
+                        croppedFlightNumber = cropImage(uiImage, to: flightNumberROI)
+                        croppedAircraftType = cropImage(uiImage, to: aircraftTypeROI)
+                        croppedAircraftReg  = cropImage(uiImage, to: aircraftRegROI)
+                        croppedDeparture = cropImage(uiImage, to: departureROI)
+                        croppedArrival = cropImage(uiImage, to: arrivalROI)
+                        croppedSchedDep = cropImage(uiImage, to: schedDepROI)
+                        croppedSchedArr = cropImage(uiImage, to: schedArrROI)
+                        croppedDayDate = cropImage(uiImage, to: dayDateROI)
+                        croppedOutTime = cropImage(uiImage, to: outTimeROI)
+                        croppedOffTime = cropImage(uiImage, to: offTimeROI)
+                        croppedOnTime = cropImage(uiImage, to: onTimeROI)
+                        croppedInTime = cropImage(uiImage, to: inTimeROI)
+                        croppedCrewList = cropImage(uiImage, to: crewListROI)
+                        // Run OCR on each cropped region
+                        if let img = croppedFlightNumber {
+                            ocrText(from: img, label: "FlightNumber") { text in
+                                DispatchQueue.main.async { ocrFlightNumber = text }
+                            }
+                        }
+                        if let img = croppedAircraftType {
+                            ocrText(from: img, label: "AircraftType") { text in
+                                DispatchQueue.main.async { ocrAircraftType = text }
+                            }
+                        }
+                        if let img = croppedAircraftReg {
+                            ocrText(from: img, label: "AircraftReg") { text in
+                                DispatchQueue.main.async { ocrAircraftReg = text }
+                            }
+                        }
+                        if let img = croppedDeparture {
+                            ocrText(from: img, label: "Departure") { text in
+                                DispatchQueue.main.async { ocrDeparture = text }
+                            }
+                        }
+                        if let img = croppedArrival {
+                            ocrText(from: img, label: "Arrival") { text in
+                                DispatchQueue.main.async { ocrArrival = text }
+                            }
+                        }
+                        if let img = croppedSchedDep {
+                            ocrText(from: img, label: "SchedDep") { text in
+                                DispatchQueue.main.async { ocrSchedDep = text }
+                            }
+                        }
+                        if let img = croppedSchedArr {
+                            ocrText(from: img, label: "SchedArr") { text in
+                                DispatchQueue.main.async { ocrSchedArr = text }
+                            }
+                        }
+                        if let img = croppedDayDate {
+                            ocrText(from: img, label: "DayDate") { text in
+                                DispatchQueue.main.async { ocrDayDate = text }
+                            }
+                        }
+                        if let img = croppedOutTime {
+                            ocrText(from: img, label: "OutTime") { text in
+                                DispatchQueue.main.async { ocrOutTime = text }
+                            }
+                        }
+                        if let img = croppedOffTime {
+                            ocrText(from: img, label: "OffTime") { text in
+                                DispatchQueue.main.async { ocrOffTime = text }
+                            }
+                        }
+                        if let img = croppedOnTime {
+                            ocrText(from: img, label: "OnTime") { text in
+                                DispatchQueue.main.async { ocrOnTime = text }
+                            }
+                        }
+                        if let img = croppedInTime {
+                            ocrText(from: img, label: "InTime") { text in
+                                DispatchQueue.main.async { ocrInTime = text }
+                            }
+                        }
+                        if let img = croppedCrewList {
+                            ocrText(from: img, label: "CrewList") { text in
+                                DispatchQueue.main.async { ocrCrewList = text }
+                            }
+                        }
+                    } else {
+                        print("[DEBUG] Failed to create UIImage from data")
+                    }
+                } catch {
+                    print("[DEBUG] Error loading data from URL: \(error)")
+                }
+            }
+        }
     }
     
     func runOCR(on image: UIImage) {
@@ -999,5 +1081,5 @@ func generateFlightKey(date: String, flightNumber: String, from: String, to: Str
 }
 
 #Preview {
-    ContentView()
+    ContentView(incomingImageURL: .constant(nil))
 }
