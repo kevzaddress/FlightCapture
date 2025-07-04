@@ -549,30 +549,55 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     @State private var imageTypes: [String] = [] // 'crewList' or 'dashboard'
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // CameraView(recognizedText: $recognizedText)
-            //     .edgesIgnoringSafeArea(.all)
-            VStack {
-                Spacer()
-                Text("Import Screenshot")
-                    .font(.headline)
-                    .padding(10)
-                    .background(Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                PhotosPicker(
-                    selection: $selectedPhotos,
-                    maxSelectionCount: 2, // Allow up to 2 images
-                    matching: .images,
-                    photoLibrary: .shared()
-                ) {
-                    Text("Import Screenshots")
-                        .font(.headline)
-                        .padding(10)
-                        .background(Color.purple)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                                Image(systemName: "airplane.circle.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.teal)
+                        
+                        Text("FlightCapture")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        
+                        Text("Import flight screenshots and export to LogTen Pro")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 20)
+                    
+                    // Import Section
+                    VStack(spacing: 16) {
+                        PhotosPicker(
+                            selection: $selectedPhotos,
+                            maxSelectionCount: 2,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .font(.title2)
+                                Text("Import Screenshots")
+                                    .font(.headline)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(Color.teal)
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                            .shadow(color: Color.teal.opacity(0.18), radius: 6, x: 0, y: 3)
+                            .accessibilityLabel("Import flight screenshots")
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Text("Select 1-2 screenshots (dashboard + crew list)")
+                                    .font(.caption)
+                            .foregroundColor(.secondary)
+                            }
+                    .padding(.horizontal)
                 .onChange(of: selectedPhotos, initial: false) { _, newItems in
                     print("[DEBUG] User selected photos: \(newItems.map { String(describing: $0) })")
                     importedImages = []
@@ -605,7 +630,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         } else if lowerText.contains("fmc & ats") || lowerText.contains("out") || lowerText.contains("dashboard") {
                                             type = "dashboard"
                                             dashboardImage = uiImage
-                                        } else {
+                        } else {
                                             type = "unknown"
                                         }
                                         imageTypes.append(type)
@@ -645,300 +670,198 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         .cornerRadius(12)
                         .padding(.bottom, 8)
                 }
-                // Show cropped debug previews
-                HStack {
-                    if let croppedFlightNumber = croppedFlightNumber {
-                        VStack {
-                            Text("Flight # ROI")
-                                .font(.caption)
+                    // Export Section
+                    if flightNumber != nil && aircraftReg != nil && departureAirport != nil && arrivalAirport != nil {
+                        VStack(spacing: 16) {
+                            Button(action: {
+                                if isLogTenProInstalled() {
+                                    exportToLogTen(jsonString: logTenJSON)
+                                } else {
+                                    showLogTenAlert = true
+                                }
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "paperplane.fill")
+                                        .font(.title2)
+                                    Text("Export to LogTen Pro")
+                                        .font(.headline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
+                                .background(
+                                    LinearGradient(gradient: Gradient(colors: [Color.teal, Color.cyan]), startPoint: .leading, endPoint: .trailing)
+                                )
                                 .foregroundColor(.white)
-                            Image(uiImage: croppedFlightNumber)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.yellow, width: 2)
+                                .cornerRadius(14)
+                                .shadow(color: Color.teal.opacity(0.18), radius: 6, x: 0, y: 3)
+                                .accessibilityLabel("Export flight to LogTen Pro")
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Text("Flight data ready for export")
+                                    .font(.caption)
+                                .foregroundColor(.secondary)
+                            }
+                        .padding(.horizontal)
+                        .alert(isPresented: $showLogTenAlert) {
+                            Alert(
+                                title: Text("LogTen Pro Not Found"),
+                                message: Text("LogTen Pro is not installed on this device. Please install it from the App Store."),
+                                dismissButton: .default(Text("OK"))
+                            )
                         }
                     }
-                    if let croppedAircraftType = croppedAircraftType {
-                        VStack {
-                            Text("Type ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedAircraftType)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.orange, width: 2)
+                    
+                    // Flight Data Preview Section
+                    if flightNumber != nil || aircraftReg != nil || departureAirport != nil || arrivalAirport != nil || outTime != nil || offTime != nil || onTime != nil || inTime != nil {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "airplane.departure")
+                                    .foregroundColor(.teal)
+                                Text("Flight Details")
+                                    .font(.headline)
+                            }
+                            
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                if let flightNumber = flightNumber {
+                                    FlightDataCard(
+                                        icon: "number.circle.fill",
+                                        title: "Flight",
+                                        value: flightNumber,
+                                        color: .teal
+                                    )
+                                }
+                                
+                                if let aircraftReg = aircraftReg {
+                                    FlightDataCard(
+                                        icon: "airplane.circle.fill",
+                                        title: "Aircraft",
+                                        value: aircraftReg,
+                                        color: .teal
+                                    )
+                                }
+                                
+                                if let departureAirport = departureAirport {
+                                    FlightDataCard(
+                                        icon: "airplane.departure",
+                                        title: "From",
+                                        value: departureAirport,
+                                        color: .teal
+                                    )
                         }
-                    }
-                    if let croppedAircraftReg = croppedAircraftReg {
-                        VStack {
-                            Text("Reg ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedAircraftReg)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.cyan, width: 2)
-                        }
-                    }
-                }
-                // New ROI debug previews
-                HStack {
-                    if let croppedDeparture = croppedDeparture {
-                        VStack {
-                            Text("Departure ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedDeparture)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.blue, width: 2)
-                        }
-                    }
-                    if let croppedArrival = croppedArrival {
-                        VStack {
-                            Text("Arrival ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedArrival)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.purple, width: 2)
-                        }
-                    }
-                    if let croppedSchedDep = croppedSchedDep {
-                        VStack {
-                            Text("Sched Dep ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedSchedDep)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.mint, width: 2)
-                        }
-                    }
-                    if let croppedSchedArr = croppedSchedArr {
-                        VStack {
-                            Text("Sched Arr ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedSchedArr)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.teal, width: 2)
-                        }
-                    }
-                }
-                // Time field debug previews
-                HStack {
-                    if let croppedOutTime = croppedOutTime {
-                        VStack {
-                            Text("OUT Time ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedOutTime)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.red, width: 2)
-                        }
-                    }
-                    if let croppedOffTime = croppedOffTime {
-                        VStack {
-                            Text("OFF Time ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedOffTime)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.pink, width: 2)
-                        }
-                    }
-                    if let croppedOnTime = croppedOnTime {
-                        VStack {
-                            Text("ON Time ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedOnTime)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.indigo, width: 2)
-                        }
-                    }
-                    if let croppedInTime = croppedInTime {
-                        VStack {
-                            Text("IN Time ROI")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                            Image(uiImage: croppedInTime)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 40)
-                                .border(Color.brown, width: 2)
-                        }
+                                
+                                if let arrivalAirport = arrivalAirport {
+                                    FlightDataCard(
+                                        icon: "airplane.arrival",
+                                        title: "To",
+                                        value: arrivalAirport,
+                                        color: .teal
+                                    )
                     }
                 }
-                // Show OCR results for each field
-                VStack(alignment: .leading) {
-                    Text("Flight Number OCR: \(ocrFlightNumber)")
-                        .foregroundColor(.yellow)
-                    Text("Aircraft Type OCR: \(ocrAircraftType)")
-                        .foregroundColor(.orange)
-                    Text("Aircraft Reg OCR: \(ocrAircraftReg)")
-                        .foregroundColor(.cyan)
-                    Text("Departure OCR: \(ocrDeparture)")
-                        .foregroundColor(.blue)
-                    Text("Arrival OCR: \(ocrArrival)")
-                        .foregroundColor(.purple)
-                    Text("Sched Dep OCR: \(ocrSchedDep)")
-                        .foregroundColor(.mint)
-                    Text("Sched Arr OCR: \(ocrSchedArr)")
-                        .foregroundColor(.teal)
-                    Text("OUT Time OCR: \(ocrOutTime)")
-                        .foregroundColor(.red)
-                    Text("OFF Time OCR: \(ocrOffTime)")
-                        .foregroundColor(.pink)
-                    Text("ON Time OCR: \(ocrOnTime)")
-                        .foregroundColor(.indigo)
-                    Text("IN Time OCR: \(ocrInTime)")
-                        .foregroundColor(.brown)
-                }
-                .padding(.vertical, 4)
-                // Show extracted flight number/type/reg from OCR or regex
-                if let flightNumber = flightNumber {
-                    Text("Flight Number: \(flightNumber)")
+                            // OUT, OFF, ON, IN cards as a separate grid for clarity and compiler performance
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                if let outTime = outTime {
+                                    FlightDataCard(
+                                        icon: "OUT",
+                                        title: "OUT",
+                                        value: outTime,
+                                        color: .teal,
+                                        isCustomIcon: true
+                                    )
+                                }
+                                if let offTime = offTime {
+                                    FlightDataCard(
+                                        icon: "OFF",
+                                        title: "OFF",
+                                        value: offTime,
+                                        color: .teal,
+                                        isCustomIcon: true
+                                    )
+                                }
+                                if let onTime = onTime {
+                                    FlightDataCard(
+                                        icon: "ON",
+                                        title: "ON",
+                                        value: onTime,
+                                        color: .teal,
+                                        isCustomIcon: true
+                                    )
+                                }
+                                if let inTime = inTime {
+                                    FlightDataCard(
+                                        icon: "IN",
+                                        title: "IN",
+                                        value: inTime,
+                                        color: .teal,
+                                        isCustomIcon: true
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    // Crew List Section
+                    if !parsedCrewList.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "person.3.fill")
+                                    .foregroundColor(.teal)
+                                Text("Crew Members")
+                                    .font(.headline)
+                            }
+                            
+                            LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
+                                ForEach(parsedCrewList, id: \.self) { crew in
+                                    HStack {
+                                        Image(systemName: "person.circle.fill")
+                                            .foregroundColor(.teal)
+                                        Text(crew)
+                                            .font(.subheadline)
+                Spacer()
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    // Debug Section (only show in debug builds)
+                    #if DEBUG
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Image(systemName: "text.magnifyingglass")
+                                .foregroundColor(.teal)
+                            Text("Debug Information")
                         .font(.headline)
-                        .foregroundColor(.yellow)
-                        .padding(.bottom, 2)
-                } else {
-                    Text("Flight Number: Not found")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding(.bottom, 2)
-                }
-                if let departureAirport = departureAirport {
-                    Text("Departure Airport: \(departureAirport)")
-                        .font(.headline)
-                        .foregroundColor(.blue)
-                        .padding(.bottom, 2)
-                } else {
-                    Text("Departure Airport: Not found")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding(.bottom, 2)
-                }
-                if let arrivalAirport = arrivalAirport {
-                    Text("Arrival Airport: \(arrivalAirport)")
-                        .font(.headline)
-                        .foregroundColor(.purple)
-                        .padding(.bottom, 2)
-                } else {
-                    Text("Arrival Airport: Not found")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding(.bottom, 2)
-                }
-                if let aircraftReg = aircraftReg {
-                    Text("Aircraft Registration: \(aircraftReg)")
-                        .font(.headline)
-                        .foregroundColor(.cyan)
-                        .padding(.bottom, 2)
-                
-                } else {
-                    Text("Aircraft Registration: Not found")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding(.bottom, 4)
-                }
-                // Place Export button here
-                Button(action: {
-                    exportedJSON = logTenJSON
-                    showJSONAlert = true
-                }) {
-                    Text("Export as LogTen JSON")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.blue)
+                        }
+                        
+                        ScrollView {
+                            Text(recognizedText.isEmpty ? "No text detected yet..." : recognizedText)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .padding()
+                                .background(Color(.systemGray6))
                         .cornerRadius(8)
-                }
-                .padding(.bottom, 8)
-                .alert(isPresented: $showJSONAlert) {
-                    Alert(title: Text("LogTen JSON Export"), message: Text(exportedJSON), dismissButton: .default(Text("OK")))
-                }
-                // Place Send to LogTen button here (no ScrollView)
-                if flightNumber != nil && aircraftReg != nil && departureAirport != nil && arrivalAirport != nil {
-                    Button(action: {
-                        if isLogTenProInstalled() {
-                            exportToLogTen(jsonString: logTenJSON)
-                        } else {
-                            showLogTenAlert = true
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    }) {
-                        Text("Send to LogTen")
-                            .font(.headline)
-                            .padding(10)
-                            .background(Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                        .frame(height: 150)
                     }
-                    .alert(isPresented: $showLogTenAlert) {
-                        Alert(title: Text("LogTen Not Installed"), message: Text("LogTen Pro is not installed on this device."), dismissButton: .default(Text("OK")))
-                    }
+                    .padding(.horizontal)
+                    #endif
+                    
+                    Spacer(minLength: 32)
+                    .padding(.bottom, 24)
                 }
-                // Crew List (parsed)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Crew List (parsed):")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    ForEach(parsedCrewList, id: \ .self) { crew in
-                        Text(crew)
-                            .foregroundColor(.cyan)
-                    }
-                }
-                .padding(8)
-                .background(Color.black.opacity(0.7))
-                .cornerRadius(8)
-                ScrollView {
-                    Text("Recognized Text:")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding(.bottom, 4)
-                    Text(recognizedText.isEmpty ? "No text detected yet..." : recognizedText)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.green)
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 200)
                 .padding(.bottom, 20)
-                // Add debug preview for croppedDayDate
-                if let croppedDayDate = croppedDayDate {
-                    VStack {
-                        Text("Day/Date ROI")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                        Image(uiImage: croppedDayDate)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 40)
-                            .border(Color.gray, width: 2)
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-        .onChange(of: incomingImageURL, initial: false) { _, newURL in
+             }
+             .navigationBarHidden(true)
+             .onChange(of: incomingImageURL, initial: false) { _, newURL in
             print("[DEBUG] onChange incomingImageURL: \(String(describing: newURL))")
             if let url = newURL {
                 do {
@@ -946,88 +869,89 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     print("[DEBUG] Loaded data from URL: \(url), size: \(data.count) bytes")
                     if let uiImage = UIImage(data: data) {
                         print("[DEBUG] Created UIImage from data")
-                        importedImage = uiImage
-                        // Crop to ROIs
-                        croppedFlightNumber = cropImage(uiImage, to: flightNumberROI)
-                        croppedAircraftType = cropImage(uiImage, to: aircraftTypeROI)
-                        croppedAircraftReg  = cropImage(uiImage, to: aircraftRegROI)
-                        croppedDeparture = cropImage(uiImage, to: departureROI)
-                        croppedArrival = cropImage(uiImage, to: arrivalROI)
-                        croppedSchedDep = cropImage(uiImage, to: schedDepROI)
-                        croppedSchedArr = cropImage(uiImage, to: schedArrROI)
+                                importedImage = uiImage
+                                // Crop to ROIs
+                                croppedFlightNumber = cropImage(uiImage, to: flightNumberROI)
+                                croppedAircraftType = cropImage(uiImage, to: aircraftTypeROI)
+                                croppedAircraftReg  = cropImage(uiImage, to: aircraftRegROI)
+                                croppedDeparture = cropImage(uiImage, to: departureROI)
+                                croppedArrival = cropImage(uiImage, to: arrivalROI)
+                                croppedSchedDep = cropImage(uiImage, to: schedDepROI)
+                                croppedSchedArr = cropImage(uiImage, to: schedArrROI)
                         croppedDayDate = cropImage(uiImage, to: dayDateROI)
                         croppedOutTime = cropImage(uiImage, to: outTimeROI)
                         croppedOffTime = cropImage(uiImage, to: offTimeROI)
                         croppedOnTime = cropImage(uiImage, to: onTimeROI)
                         croppedInTime = cropImage(uiImage, to: inTimeROI)
-                        // Run OCR on each cropped region
-                        if let img = croppedFlightNumber {
-                            ocrText(from: img, label: "FlightNumber") { text in
-                                DispatchQueue.main.async { ocrFlightNumber = text }
-                            }
-                        }
-                        if let img = croppedAircraftType {
-                            ocrText(from: img, label: "AircraftType") { text in
-                                DispatchQueue.main.async { ocrAircraftType = text }
-                            }
-                        }
-                        if let img = croppedAircraftReg {
-                            ocrText(from: img, label: "AircraftReg") { text in
-                                DispatchQueue.main.async { ocrAircraftReg = text }
-                            }
-                        }
-                        if let img = croppedDeparture {
-                            ocrText(from: img, label: "Departure") { text in
-                                DispatchQueue.main.async { ocrDeparture = text }
-                            }
-                        }
-                        if let img = croppedArrival {
-                            ocrText(from: img, label: "Arrival") { text in
-                                DispatchQueue.main.async { ocrArrival = text }
-                            }
-                        }
-                        if let img = croppedSchedDep {
-                            ocrText(from: img, label: "SchedDep") { text in
-                                DispatchQueue.main.async { ocrSchedDep = text }
-                            }
-                        }
-                        if let img = croppedSchedArr {
-                            ocrText(from: img, label: "SchedArr") { text in
-                                DispatchQueue.main.async { ocrSchedArr = text }
-                            }
-                        }
-                        if let img = croppedDayDate {
-                            ocrText(from: img, label: "DayDate") { text in
-                                DispatchQueue.main.async { ocrDayDate = text }
-                            }
-                        }
+                                // Run OCR on each cropped region
+                                if let img = croppedFlightNumber {
+                                    ocrText(from: img, label: "FlightNumber") { text in
+                                        DispatchQueue.main.async { ocrFlightNumber = text }
+                                    }
+                                }
+                                if let img = croppedAircraftType {
+                                    ocrText(from: img, label: "AircraftType") { text in
+                                        DispatchQueue.main.async { ocrAircraftType = text }
+                                    }
+                                }
+                                if let img = croppedAircraftReg {
+                                    ocrText(from: img, label: "AircraftReg") { text in
+                                        DispatchQueue.main.async { ocrAircraftReg = text }
+                                    }
+                                }
+                                if let img = croppedDeparture {
+                                    ocrText(from: img, label: "Departure") { text in
+                                        DispatchQueue.main.async { ocrDeparture = text }
+                                    }
+                                }
+                                if let img = croppedArrival {
+                                    ocrText(from: img, label: "Arrival") { text in
+                                        DispatchQueue.main.async { ocrArrival = text }
+                                    }
+                                }
+                                if let img = croppedSchedDep {
+                                    ocrText(from: img, label: "SchedDep") { text in
+                                        DispatchQueue.main.async { ocrSchedDep = text }
+                                    }
+                                }
+                                if let img = croppedSchedArr {
+                                    ocrText(from: img, label: "SchedArr") { text in
+                                        DispatchQueue.main.async { ocrSchedArr = text }
+                                    }
+                                }
+                                if let img = croppedDayDate {
+                                    ocrText(from: img, label: "DayDate") { text in
+                                        DispatchQueue.main.async { ocrDayDate = text }
+                                    }
+                                }
                         if let img = croppedOutTime {
                             ocrText(from: img, label: "OutTime") { text in
                                 DispatchQueue.main.async { ocrOutTime = text }
-                            }
                         }
+                    }
                         if let img = croppedOffTime {
                             ocrText(from: img, label: "OffTime") { text in
                                 DispatchQueue.main.async { ocrOffTime = text }
-                            }
                         }
+                    }
                         if let img = croppedOnTime {
                             ocrText(from: img, label: "OnTime") { text in
                                 DispatchQueue.main.async { ocrOnTime = text }
-                            }
                         }
+                    }
                         if let img = croppedInTime {
                             ocrText(from: img, label: "InTime") { text in
                                 DispatchQueue.main.async { ocrInTime = text }
                             }
                         }
-                    } else {
+                } else {
                         print("[DEBUG] Failed to create UIImage from data")
                     }
                 } catch {
                     print("[DEBUG] Error loading data from URL: \(error)")
                 }
-            }
+                    }
+                }
         }
     }
     
@@ -1319,7 +1243,6 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             }
         }
     }
-}
 
 // Generate a robust, deterministic flight_key using date, flight number, from, and to
 func generateFlightKey(date: String, flightNumber: String, from: String, to: String) -> String {
@@ -1327,7 +1250,45 @@ func generateFlightKey(date: String, flightNumber: String, from: String, to: Str
     let hash = SHA256.hash(data: Data(base.utf8))
     return "FC_" + hash.compactMap { String(format: "%02x", $0) }.joined().prefix(16)
 }
-
+}
 #Preview {
     ContentView(incomingImageURL: .constant(nil))
+}
+
+// MARK: - Flight Data Card Component
+struct FlightDataCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let color: Color
+    var isCustomIcon: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if isCustomIcon {
+                    Image(icon)
+                        .resizable()
+                        .frame(width: 28, height: 28)
+                        .foregroundColor(color)
+                } else {
+                    Image(systemName: icon)
+                        .foregroundColor(color)
+                        .font(.title3)
+                }
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+        }
+        .padding(12)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
 }
