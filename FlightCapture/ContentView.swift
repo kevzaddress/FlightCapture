@@ -824,6 +824,12 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                     )
                     }
                 }
+                            
+                            // Date card - full width below flight/aircraft cards
+                            if let flightDate = inferredDate {
+                                FlightDateCard(date: flightDate)
+                            }
+                            
                             // OUT, OFF, ON, IN cards as a separate grid for clarity and compiler performance
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                 if let outTime = outTime {
@@ -1544,6 +1550,41 @@ struct FlightDataCard: View {
         .background(highlight ? Color.yellow.opacity(0.3) : Color(.systemGray6))
         .cornerRadius(12)
         .animation(.easeInOut, value: highlight)
+    }
+}
+
+// MARK: - Flight Date Card Component
+struct FlightDateCard: View {
+    let date: Date
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.circle.fill")
+                .foregroundColor(.teal)
+                .font(.title3)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Date")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(formatDate(date))
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy"
+        return formatter.string(from: date)
     }
 }
 
