@@ -117,28 +117,48 @@ struct ContentView: View {
     @State private var ocrOffTime: String = ""
     @State private var ocrOnTime: String = ""
     @State private var ocrInTime: String = ""
+    
+    // Edited values state variables (Phase 1)
+    @State private var editedFlightNumber: String = ""
+    @State private var editedAircraftReg: String = ""
+    @State private var editedDeparture: String = ""
+    @State private var editedArrival: String = ""
+    @State private var editedOutTime: String = ""
+    @State private var editedOffTime: String = ""
+    @State private var editedOnTime: String = ""
+    @State private var editedInTime: String = ""
+    @State private var editedDate: Date? = nil
+    
     // Day and Date: top-left (480, 56), bottom-right (543, 130)
     let dayDateROI = FieldROI(x: 480/2360, y: 56/1640, width: (543-480)/2360, height: (130-56)/1640)
     // Use OCR values if screenshot is imported, otherwise fallback to regex extraction
     var flightNumber: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedFlightNumber.isEmpty { return editedFlightNumber }
         let trimmed = ocrFlightNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
         // fallback to regex/extraction from recognizedText
         return extractFlightNumber(from: recognizedText)
     }
     var departureAirport: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedDeparture.isEmpty { return editedDeparture }
         let trimmed = ocrDeparture.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
         // fallback to regex/extraction from recognizedText
         return extractDepartureAirport(from: recognizedText)
     }
     var arrivalAirport: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedArrival.isEmpty { return editedArrival }
         let trimmed = ocrArrival.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
         // fallback to regex/extraction from recognizedText
         return extractArrivalAirport(from: recognizedText)
     }
     var aircraftReg: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedAircraftReg.isEmpty { return editedAircraftReg }
         let trimmed = ocrAircraftReg.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return normalizeAircraftReg(trimmed) }
         // fallback to regex/extraction from recognizedText
@@ -237,24 +257,32 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     
     // Time field computed properties with fallback
     var outTime: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedOutTime.isEmpty { return editedOutTime }
         let trimmed = ocrOutTime.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return extractOutTime(from: trimmed) }
         return extractOutTime(from: recognizedText)
     }
     
     var offTime: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedOffTime.isEmpty { return editedOffTime }
         let trimmed = ocrOffTime.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return extractOffTime(from: trimmed) }
         return extractOffTime(from: recognizedText)
     }
     
     var onTime: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedOnTime.isEmpty { return editedOnTime }
         let trimmed = ocrOnTime.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return extractOnTime(from: trimmed) }
         return extractOnTime(from: recognizedText)
     }
     
     var inTime: String? {
+        // Use edited value if available, otherwise use OCR
+        if !editedInTime.isEmpty { return editedInTime }
         let trimmed = ocrInTime.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return extractInTime(from: trimmed) }
         return extractInTime(from: recognizedText)
@@ -288,6 +316,10 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     }
     // Returns inferred date if possible
     var inferredDate: Date? {
+        // Use edited date if available, otherwise infer from OCR
+        if let editedDate = editedDate {
+            return editedDate
+        }
         guard let (dow, dom) = parseDayDate(ocrDayDate) else { return nil }
         return inferDate(dayOfWeek: dow, dayOfMonth: dom)
     }
@@ -659,6 +691,19 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     parsedCrewList = []
                     cockpitCrewDisplay = []
                     cabinCrewDisplay = []
+                    
+                    // Clear edited values for new flight (Phase 1 fix)
+                    editedFlightNumber = ""
+                    editedAircraftReg = ""
+                    editedDeparture = ""
+                    editedArrival = ""
+                    editedOutTime = ""
+                    editedOffTime = ""
+                    editedOnTime = ""
+                    editedInTime = ""
+                    editedDate = nil
+                    print("[DEBUG] Cleared all edited values for new flight")
+                    
                     // Temporary holders for dashboard/crewList images
                     var dashboardImage: UIImage? = nil
                     var crewListImage: UIImage? = nil
@@ -790,7 +835,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "Flight",
                                         value: flightNumber,
                                         color: .teal,
-                                        highlight: ocrFieldHighlight == "flightNumber"
+                                        highlight: ocrFieldHighlight == "flightNumber",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] Flight number edited: \(newValue)")
+                                            editedFlightNumber = newValue
+                                        }
                                     )
                                 }
                                 
@@ -800,7 +849,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "Aircraft",
                                         value: aircraftReg,
                                         color: .teal,
-                                        highlight: ocrFieldHighlight == "aircraftReg"
+                                        highlight: ocrFieldHighlight == "aircraftReg",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] Aircraft reg edited: \(newValue)")
+                                            editedAircraftReg = newValue
+                                        }
                                     )
                                 }
                                 
@@ -810,7 +863,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "From",
                                         value: departureAirport,
                                         color: .teal,
-                                        highlight: ocrFieldHighlight == "departureAirport"
+                                        highlight: ocrFieldHighlight == "departureAirport",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] Departure edited: \(newValue)")
+                                            editedDeparture = newValue
+                                        }
                                     )
                         }
                                 
@@ -820,14 +877,24 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "To",
                                         value: arrivalAirport,
                                         color: .teal,
-                                        highlight: ocrFieldHighlight == "arrivalAirport"
+                                        highlight: ocrFieldHighlight == "arrivalAirport",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] Arrival edited: \(newValue)")
+                                            editedArrival = newValue
+                                        }
                                     )
                     }
                 }
                             
                             // Date card - full width below flight/aircraft cards
                             if let flightDate = inferredDate {
-                                FlightDateCard(date: flightDate)
+                                FlightDateCard(
+                                    date: flightDate,
+                                    onEdit: { newDate in
+                                        print("[DEBUG] Date edited: \(newDate)")
+                                        editedDate = newDate
+                                    }
+                                )
                             }
                             
                             // OUT, OFF, ON, IN cards as a separate grid for clarity and compiler performance
@@ -839,7 +906,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         value: outTime,
                                         color: .teal,
                                         isCustomIcon: true,
-                                        highlight: ocrFieldHighlight == "outTime"
+                                        highlight: ocrFieldHighlight == "outTime",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] OUT time edited: \(newValue)")
+                                            editedOutTime = newValue
+                                        }
                                     )
                                 }
                                 if let offTime = offTime {
@@ -849,7 +920,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         value: offTime,
                                         color: .teal,
                                         isCustomIcon: true,
-                                        highlight: ocrFieldHighlight == "offTime"
+                                        highlight: ocrFieldHighlight == "offTime",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] OFF time edited: \(newValue)")
+                                            editedOffTime = newValue
+                                        }
                                     )
                                 }
                                 if let onTime = onTime {
@@ -859,7 +934,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         value: onTime,
                                         color: .teal,
                                         isCustomIcon: true,
-                                        highlight: ocrFieldHighlight == "onTime"
+                                        highlight: ocrFieldHighlight == "onTime",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] ON time edited: \(newValue)")
+                                            editedOnTime = newValue
+                                        }
                                     )
                                 }
                                 if let inTime = inTime {
@@ -869,7 +948,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         value: inTime,
                                         color: .teal,
                                         isCustomIcon: true,
-                                        highlight: ocrFieldHighlight == "inTime"
+                                        highlight: ocrFieldHighlight == "inTime",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] IN time edited: \(newValue)")
+                                            editedInTime = newValue
+                                        }
                                     )
                                 }
                             }
@@ -1521,6 +1604,10 @@ struct FlightDataCard: View {
     let color: Color
     var isCustomIcon: Bool = false
     var highlight: Bool = false
+    var onEdit: ((String) -> Void)? = nil
+    
+    @State private var isEditing: Bool = false
+    @State private var editedValue: String = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1539,23 +1626,69 @@ struct FlightDataCard: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Spacer()
+                
+                // Edit indicator
+                if onEdit != nil {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
+                        .foregroundColor(isEditing ? .green : .teal)
+                        .font(.caption)
+                        .opacity(0.7)
+                }
             }
             
-            Text(value)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
+            if isEditing {
+                TextField("Enter \(title.lowercased())", text: $editedValue)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .onSubmit {
+                        saveEdit()
+                    }
+                    .onAppear {
+                        editedValue = value
+                    }
+            } else {
+                Text(value)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
         }
         .padding(12)
         .background(highlight ? Color.yellow.opacity(0.3) : Color(.systemGray6))
         .cornerRadius(12)
-        .animation(.easeInOut, value: highlight)
+        .animation(.easeInOut(duration: 0.2), value: isEditing)
+        .onTapGesture {
+            if onEdit != nil {
+                withAnimation {
+                    isEditing.toggle()
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isEditing ? Color.teal : Color.clear, lineWidth: 2)
+        )
+    }
+    
+    private func saveEdit() {
+        print("[DEBUG] Saving edit for \(title): \(editedValue)")
+        onEdit?(editedValue)
+        withAnimation {
+            isEditing = false
+        }
     }
 }
 
 // MARK: - Flight Date Card Component
 struct FlightDateCard: View {
     let date: Date
+    var onEdit: ((Date) -> Void)? = nil
+    
+    @State private var isEditing: Bool = false
+    @State private var editedDate: Date = Date()
+    @State private var showDatePicker: Bool = false
     
     var body: some View {
         HStack(spacing: 12) {
@@ -1568,17 +1701,87 @@ struct FlightDateCard: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                Text(formatDate(date))
+                Text(formatDate(isEditing ? editedDate : date))
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
             }
             
             Spacer()
+            
+            // Edit indicator
+            if onEdit != nil {
+                Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
+                    .foregroundColor(isEditing ? .green : .teal)
+                    .font(.caption)
+                    .opacity(0.7)
+            }
         }
         .padding(12)
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        .animation(.easeInOut(duration: 0.2), value: isEditing)
+        .onTapGesture {
+            if onEdit != nil {
+                if isEditing {
+                    saveEdit()
+                } else {
+                    withAnimation {
+                        isEditing = true
+                        editedDate = date
+                        showDatePicker = true
+                    }
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isEditing ? Color.teal : Color.clear, lineWidth: 2)
+        )
+        .sheet(isPresented: $showDatePicker) {
+            NavigationView {
+                VStack {
+                    DatePicker(
+                        "Select Date",
+                        selection: $editedDate,
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(WheelDatePickerStyle())
+                    .padding()
+                    
+                    HStack {
+                        Button("Cancel") {
+                            withAnimation {
+                                isEditing = false
+                                showDatePicker = false
+                            }
+                        }
+                        .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Button("Save") {
+                            saveEdit()
+                        }
+                        .foregroundColor(.teal)
+                        .fontWeight(.semibold)
+                    }
+                    .padding()
+                }
+                .navigationTitle("Edit Flight Date")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium])
+        }
+    }
+    
+    private func saveEdit() {
+        print("[DEBUG] Saving date edit: \(formatDate(editedDate))")
+        onEdit?(editedDate)
+        withAnimation {
+            isEditing = false
+            showDatePicker = false
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
