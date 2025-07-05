@@ -344,7 +344,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     }
 
     // Update logTenJSON to use all available aircraft info fields
-    var logTenJSON: String {
+    func generateLogTenJSON() -> String {
         let now = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "dd/MM/yyyy"
@@ -368,42 +368,61 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
 
         // Crew mapping logic (map parsed roles to LogTen fields)
         var crewFields: [String: String] = [:]
-        for (role, name) in crewNamesAndCodes {
-            print("[DEBUG] Processing crew role: '\(role)' -> '\(name)'")
-            switch role.lowercased() {
-            case "commander":
-                crewFields["flight_selectedCrewCommander"] = name
-                crewFields["flight_selectedCrewPIC"] = name
-            case "sic":
-                crewFields["flight_selectedCrewSIC"] = name
-            case "relief":
-                crewFields["flight_selectedCrewRelief"] = name
-            case "relief2":
-                crewFields["flight_selectedCrewRelief2"] = name
-            case "custom1_ism":
-                crewFields["flight_selectedCrewCustom1"] = name  // ISM
-                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom1 (ISM)")
-            case "custom2_so":
-                crewFields["flight_selectedCrewCustom2"] = name  // SO
-            case "custom3_stc":
-                crewFields["flight_selectedCrewCustom3"] = name  // STC
-            case "custom4_sp":
-                crewFields["flight_selectedCrewCustom4"] = name  // SP
-                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom4 (SP)")
-            case "custom5_fp":
-                crewFields["flight_selectedCrewCustom5"] = name  // FP
-                print("[DEBUG] Assigned \(name) to flight_selectedCrewCustom5 (FP)")
-            case "flightattendant":
-                crewFields["flight_selectedCrewFlightAttendant"] = name  // Primary FA
-                print("[DEBUG] Assigned \(name) to flight_selectedCrewFlightAttendant (Primary FA)")
-            case "flightattendant2":
-                crewFields["flight_selectedCrewFlightAttendant2"] = name
-            case "flightattendant3":
-                crewFields["flight_selectedCrewFlightAttendant3"] = name
-            case "flightattendant4":
-                crewFields["flight_selectedCrewFlightAttendant4"] = name
-            default:
-                break
+        
+        // Use current OCR values directly instead of calling crewNamesAndCodes
+        let crewMappings = [
+            ("Commander", ocrCrewCommander),
+            ("SIC", ocrCrewSIC),
+            ("Relief", ocrCrewRelief),
+            ("Relief2", ocrCrewRelief2),
+            ("ISM", ocrCrewCustom2ISM),
+            ("SP", ocrCrewCustom4SP),
+            ("FP", ocrCrewCustom1FP),
+            ("FlightAttendant", ocrCrewFlightAttendant),
+            ("FlightAttendant2", ocrCrewFlightAttendant2),
+            ("FlightAttendant3", ocrCrewFlightAttendant3),
+            ("FlightAttendant4", ocrCrewFlightAttendant4)
+        ]
+        
+        for (role, ocrText) in crewMappings {
+            let name = ocrText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+                // Remove trailing dots for export
+                let cleanName = name.replacingOccurrences(of: "...", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleanName.isEmpty {
+                    print("[DEBUG] Processing crew role: '\(role)' -> '\(cleanName)'")
+                    switch role.lowercased() {
+                    case "commander":
+                        crewFields["flight_selectedCrewCommander"] = cleanName.capitalized
+                        crewFields["flight_selectedCrewPIC"] = cleanName.capitalized
+                    case "sic":
+                        crewFields["flight_selectedCrewSIC"] = cleanName.capitalized
+                    case "relief":
+                        crewFields["flight_selectedCrewRelief"] = cleanName.capitalized
+                    case "relief2":
+                        crewFields["flight_selectedCrewRelief2"] = cleanName.capitalized
+                    case "ism":
+                        crewFields["flight_selectedCrewCustom1"] = cleanName.capitalized  // ISM
+                        print("[DEBUG] Assigned \(cleanName.capitalized) to flight_selectedCrewCustom1 (ISM)")
+                    case "sp":
+                        crewFields["flight_selectedCrewCustom4"] = cleanName.capitalized  // SP
+                        print("[DEBUG] Assigned \(cleanName.capitalized) to flight_selectedCrewCustom4 (SP)")
+                    case "fp":
+                        crewFields["flight_selectedCrewCustom5"] = cleanName.capitalized  // FP
+                        print("[DEBUG] Assigned \(cleanName.capitalized) to flight_selectedCrewCustom5 (FP)")
+                    case "flightattendant":
+                        crewFields["flight_selectedCrewFlightAttendant"] = cleanName.capitalized  // Primary FA
+                        print("[DEBUG] Assigned \(cleanName.capitalized) to flight_selectedCrewFlightAttendant (Primary FA)")
+                    case "flightattendant2":
+                        crewFields["flight_selectedCrewFlightAttendant2"] = cleanName.capitalized
+                    case "flightattendant3":
+                        crewFields["flight_selectedCrewFlightAttendant3"] = cleanName.capitalized
+                    case "flightattendant4":
+                        crewFields["flight_selectedCrewFlightAttendant4"] = cleanName.capitalized
+                    default:
+                        break
+                    }
+                }
             }
         }
 
@@ -492,61 +511,95 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     }
     
     // Step 4: Crew list ROIs (normalized for 2360x1640)
-    let commanderROI = FieldROI(x: 175/2360, y: 331/1640, width: (596-175)/2360, height: (538-331)/1640)
-    let sicROI = FieldROI(x: 1212/2360, y: 331/1640, width: (1624-1212)/2360, height: (538-331)/1640)
-    let reliefROI = FieldROI(x: 695/2360, y: 331/1640, width: (1111-695)/2360, height: (538-331)/1640)
-    let relief2ROI = FieldROI(x: 1724/2360, y: 331/1640, width: (2140-1724)/2360, height: (538-331)/1640)
-    let crewCustom1ROI = FieldROI(x: 1205/2360, y: 705/1640, width: (1674-1205)/2360, height: (850-705)/1640)
-    let crewCustom2ROI = FieldROI(x: 175/2360, y: 705/1640, width: (635-175)/2360, height: (850-705)/1640)
-    let crewCustom4ROI = FieldROI(x: 695/2360, y: 705/1640, width: (1154-695)/2360, height: (850-705)/1640)
-    let crewFlightAttendantROI = FieldROI(x: 1715/2360, y: 705/1640, width: (2180-1715)/2360, height: (850-705)/1640)
-    let crewFlightAttendant2ROI = FieldROI(x: 175/2360, y: 900/1640, width: (635-175)/2360, height: (1050-900)/1640)
-    let crewFlightAttendant3ROI = FieldROI(x: 695/2360, y: 896/1640, width: (1153-695)/2360, height: (1053-896)/1640)
-    let crewFlightAttendant4ROI = FieldROI(x: 1205/2360, y: 900/1640, width: (1672-1205)/2360, height: (1050-900)/1640)
+    let crewCommanderROI = FieldROI(x: 180/2360, y: 380/1640, width: (645-180)/2360, height: (420-380)/1640)
+    let crewSICROI = FieldROI(x: 685/2360, y: 380/1640, width: (1155-685)/2360, height: (420-380)/1640)
+    let crewReliefROI = FieldROI(x: 1205/2360, y: 380/1640, width: (1675-1205)/2360, height: (420-380)/1640)
+    let crewRelief2ROI = FieldROI(x: 1720/2360, y: 380/1640, width: (2185-1720)/2360, height: (420-380)/1640)
+    let crewCustom2ISMROI = FieldROI(x: 180/2360, y: 750/1640, width: (645-180)/2360, height: (796-750)/1640)
+    let crewCustom4SPROI = FieldROI(x: 685/2360, y: 750/1640, width: (1155-685)/2360, height: (796-750)/1640)
+    let crewCustom1FPROI = FieldROI(x: 1205/2360, y: 750/1640, width: (1675-1205)/2360, height: (796-750)/1640)
+    let crewFlightAttendantROI = FieldROI(x: 1720/2360, y: 750/1640, width: (2185-1720)/2360, height: (796-750)/1640)
+    let crewFlightAttendant2ROI = FieldROI(x: 180/2360, y: 950/1640, width: (645-180)/2360, height: (995-950)/1640)
+    let crewFlightAttendant3ROI = FieldROI(x: 685/2360, y: 950/1640, width: (1155-685)/2360, height: (995-950)/1640)
+    let crewFlightAttendant4ROI = FieldROI(x: 1205/2360, y: 950/1640, width: (1675-1205)/2360, height: (995-950)/1640)
     
     // Dashboard crew names ROI (for single image import)
     let dashboardCrewNamesROI = FieldROI(x: 26/2360, y: 1205/1640, width: (460-26)/2360, height: (1395-1205)/1640)
     
     @State private var parsedCrewList: [String] = []
-    // Helper to title-case a name (first letter of each word uppercase, rest lowercase)
-    func titleCase(_ name: String) -> String {
-        return name
-            .split(separator: " ")
-            .map { word in
-                guard let first = word.first else { return "" }
-                return String(first).uppercased() + word.dropFirst().lowercased()
-            }
-            .joined(separator: " ")
+    @State private var cockpitCrewDisplay: [String] = []
+    @State private var cabinCrewDisplay: [String] = []
+    struct CrewNameReview: Identifiable {
+        let id = UUID()
+        let role: String
+        let original: String
+        var corrected: String
     }
-    // Returns [(role, name)] for each parsed crew ROI result, extracting and title-casing the name
-    var crewNamesAndCodes: [(role: String, name: String)] {
-        parsedCrewList.compactMap { line in
-            // Split "Role: OCRText"
-            let parts = line.components(separatedBy: ":")
-            guard parts.count >= 2 else { return nil }
-            let role = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            let ocrText = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // For dashboard crew parsing, the name is directly after the colon
-            // For crew list parsing, the name might be in a comma-separated list
-            let name: String
-            if ocrText.contains(",") {
-                // Split OCR text by comma, trim, and filter empty
-                let fields = ocrText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-                // The name is usually the second field
-                name = fields.count > 1 ? titleCase(fields[1]) : titleCase(fields.first ?? "")
-            } else {
-                // Direct name after colon (dashboard crew parsing)
-                name = titleCase(ocrText)
-            }
-            
-            print("[DEBUG] crewNamesAndCodes: role='\(role)', ocrText='\(ocrText)', name='\(name)'")
-            return (role, name)
+
+    @State private var crewNamesNeedingReview: [CrewNameReview] = []
+    @State private var showCrewReviewSheet: Bool = false
+
+    // Update extractCrewName to remove trailing dots and flag for review
+    func extractCrewName(from ocrText: String, role: String? = nil) -> String {
+        print("[DEBUG] extractCrewName called for role: \(role ?? "nil") with OCR text: '", ocrText, "'")
+        let knownBases = ["HKG", "SIN", "BKK", "ICN", "KIX", "LAX", "JFK", "LHR", "CDG", "SYD", "MEL", "DXB", "FRA", "SFO", "ORD", "NRT", "CAN", "SZX", "PVG", "PEK", "DEL", "BOM", "AMS", "ZRH", "YYZ", "YVR", "YUL", "YVR", "YVR", "YVR"]
+        let parts = ocrText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let nameParts = parts.filter { part in
+            let upper = part.uppercased()
+            return !knownBases.contains(upper) && upper.range(of: "^[A-Z\\s\\-\\.]+$", options: .regularExpression) != nil && upper.count > 1
         }
+        var name = nameParts.joined(separator: " ").replacingOccurrences(of: "  ", with: " ")
+        let original = name
+        print("[DEBUG] Extracted name: '", name, "' from OCR text: '", ocrText, "'")
+        // Remove trailing dots
+        if let dotRange = name.range(of: "[.]+$", options: .regularExpression) {
+            print("[DEBUG] Trailing dots detected in name: '", name, "'")
+            name.removeSubrange(dotRange)
+            name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let role = role, !name.isEmpty {
+                // Add to review list if not already present
+                if !crewNamesNeedingReview.contains(where: { $0.role == role }) {
+                    print("[DEBUG] Adding to crewNamesNeedingReview: role=\(role), original=\(original), corrected=\(name)")
+                    crewNamesNeedingReview.append(CrewNameReview(role: role, original: original, corrected: name))
+                }
+            }
+        }
+        return name.capitalized
     }
-    
+
+    // Update crewNamesAndCodes to use consistent role names and correct order
+    var crewNamesAndCodes: [(role: String, name: String)] {
+        [
+            ("Commander", extractCrewName(from: ocrCrewCommander, role: "Commander")),
+            ("SIC", extractCrewName(from: ocrCrewSIC, role: "SIC")),
+            ("Relief", extractCrewName(from: ocrCrewRelief, role: "Relief")),
+            ("Relief2", extractCrewName(from: ocrCrewRelief2, role: "Relief2")),
+            ("ISM", extractCrewName(from: ocrCrewCustom2ISM, role: "ISM")),
+            ("SP", extractCrewName(from: ocrCrewCustom4SP, role: "SP")),
+            ("FP", extractCrewName(from: ocrCrewCustom1FP, role: "FP")),
+            ("FlightAttendant", extractCrewName(from: ocrCrewFlightAttendant, role: "FlightAttendant")),
+            ("FlightAttendant2", extractCrewName(from: ocrCrewFlightAttendant2, role: "FlightAttendant2")),
+            ("FlightAttendant3", extractCrewName(from: ocrCrewFlightAttendant3, role: "FlightAttendant3")),
+            ("FlightAttendant4", extractCrewName(from: ocrCrewFlightAttendant4, role: "FlightAttendant4")),
+        ]
+    }
+
     // Step 3: Classification of each image as 'crewList' or 'dashboard'
     @State private var imageTypes: [String] = [] // 'crewList' or 'dashboard'
+    
+    @State private var ocrFieldHighlight: String? = nil
+    
+    @State private var ocrCrewCommander: String = ""
+    @State private var ocrCrewSIC: String = ""
+    @State private var ocrCrewRelief: String = ""
+    @State private var ocrCrewRelief2: String = ""
+    @State private var ocrCrewCustom2ISM: String = ""
+    @State private var ocrCrewCustom4SP: String = ""
+    @State private var ocrCrewCustom1FP: String = ""
+    @State private var ocrCrewFlightAttendant: String = ""
+    @State private var ocrCrewFlightAttendant2: String = ""
+    @State private var ocrCrewFlightAttendant3: String = ""
+    @State private var ocrCrewFlightAttendant4: String = ""
     
     var body: some View {
         NavigationView {
@@ -604,6 +657,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     ocrResults = []
                     imageTypes = []
                     parsedCrewList = []
+                    cockpitCrewDisplay = []
+                    cabinCrewDisplay = []
                     // Temporary holders for dashboard/crewList images
                     var dashboardImage: UIImage? = nil
                     var crewListImage: UIImage? = nil
@@ -674,8 +729,14 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     if flightNumber != nil && aircraftReg != nil && departureAirport != nil && arrivalAirport != nil {
                         VStack(spacing: 16) {
                             Button(action: {
-                                if isLogTenProInstalled() {
-                                    exportToLogTen(jsonString: logTenJSON)
+                                // Check if any names need review first
+                                if checkCrewNamesForReview() {
+                                    print("[DEBUG] Names need review, showing modal. Count: \(crewNamesNeedingReview.count)")
+                                    DispatchQueue.main.async {
+                                        showCrewReviewSheet = true
+                                    }
+                                } else if isLogTenProInstalled() {
+                                    exportToLogTen(jsonString: generateLogTenJSON())
                                 } else {
                                     showLogTenAlert = true
                                 }
@@ -728,7 +789,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         icon: "number.circle.fill",
                                         title: "Flight",
                                         value: flightNumber,
-                                        color: .teal
+                                        color: .teal,
+                                        highlight: ocrFieldHighlight == "flightNumber"
                                     )
                                 }
                                 
@@ -737,7 +799,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         icon: "airplane.circle.fill",
                                         title: "Aircraft",
                                         value: aircraftReg,
-                                        color: .teal
+                                        color: .teal,
+                                        highlight: ocrFieldHighlight == "aircraftReg"
                                     )
                                 }
                                 
@@ -746,7 +809,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         icon: "airplane.departure",
                                         title: "From",
                                         value: departureAirport,
-                                        color: .teal
+                                        color: .teal,
+                                        highlight: ocrFieldHighlight == "departureAirport"
                                     )
                         }
                                 
@@ -755,7 +819,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         icon: "airplane.arrival",
                                         title: "To",
                                         value: arrivalAirport,
-                                        color: .teal
+                                        color: .teal,
+                                        highlight: ocrFieldHighlight == "arrivalAirport"
                                     )
                     }
                 }
@@ -767,7 +832,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "OUT",
                                         value: outTime,
                                         color: .teal,
-                                        isCustomIcon: true
+                                        isCustomIcon: true,
+                                        highlight: ocrFieldHighlight == "outTime"
                                     )
                                 }
                                 if let offTime = offTime {
@@ -776,7 +842,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "OFF",
                                         value: offTime,
                                         color: .teal,
-                                        isCustomIcon: true
+                                        isCustomIcon: true,
+                                        highlight: ocrFieldHighlight == "offTime"
                                     )
                                 }
                                 if let onTime = onTime {
@@ -785,7 +852,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "ON",
                                         value: onTime,
                                         color: .teal,
-                                        isCustomIcon: true
+                                        isCustomIcon: true,
+                                        highlight: ocrFieldHighlight == "onTime"
                                     )
                                 }
                                 if let inTime = inTime {
@@ -794,7 +862,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         title: "IN",
                                         value: inTime,
                                         color: .teal,
-                                        isCustomIcon: true
+                                        isCustomIcon: true,
+                                        highlight: ocrFieldHighlight == "inTime"
                                     )
                                 }
                             }
@@ -802,58 +871,63 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                         .padding(.horizontal)
                     }
                     
-                    // Crew List Section
-                    if !parsedCrewList.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Image(systemName: "person.3.fill")
-                                    .foregroundColor(.teal)
-                                Text("Crew Members")
-                                    .font(.headline)
-                            }
-                            
-                            LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
-                                ForEach(parsedCrewList, id: \.self) { crew in
+                    // Crew List Section - Use actual cockpit/cabin split for two-image import
+                    if !cockpitCrewDisplay.isEmpty || !cabinCrewDisplay.isEmpty {
+                        VStack(spacing: 16) {
+                            if !cockpitCrewDisplay.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
                                     HStack {
-                                        Image(systemName: "person.circle.fill")
+                                        Image(systemName: "airplane.circle.fill")
                                             .foregroundColor(.teal)
-                                        Text(crew)
-                                            .font(.subheadline)
-                Spacer()
+                                        Text("Cockpit Crew")
+                                            .font(.headline)
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(8)
+                                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
+                                        ForEach(cockpitCrewDisplay, id: \.self) { crew in
+                                            HStack {
+                                                Image(systemName: "person.circle.fill")
+                                                    .foregroundColor(.teal)
+                                                Text(crew)
+                                                    .font(.subheadline)
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(8)
+                                        }
+                                    }
                                 }
+                                .padding(.horizontal)
+                            }
+                            if !cabinCrewDisplay.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "person.3.fill")
+                                            .foregroundColor(.teal)
+                                        Text("Cabin Crew")
+                                            .font(.headline)
+                                    }
+                                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
+                                        ForEach(cabinCrewDisplay, id: \.self) { crew in
+                                            HStack {
+                                                Image(systemName: "person.circle.fill")
+                                                    .foregroundColor(.teal)
+                                                Text(crew)
+                                                    .font(.subheadline)
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(8)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
                             }
                         }
-                        .padding(.horizontal)
                     }
-                    
-                    // Debug Section (only show in debug builds)
-                    #if DEBUG
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "text.magnifyingglass")
-                                .foregroundColor(.teal)
-                            Text("Debug Information")
-                        .font(.headline)
-                        }
-                        
-                        ScrollView {
-                            Text(recognizedText.isEmpty ? "No text detected yet..." : recognizedText)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .padding()
-                                .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(height: 150)
-                    }
-                    .padding(.horizontal)
-                    #endif
                     
                     Spacer(minLength: 32)
                     .padding(.bottom, 24)
@@ -886,62 +960,110 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                 // Run OCR on each cropped region
                                 if let img = croppedFlightNumber {
                                     ocrText(from: img, label: "FlightNumber") { text in
-                                        DispatchQueue.main.async { ocrFlightNumber = text }
+                                        DispatchQueue.main.async {
+                                            ocrFlightNumber = text
+                                            ocrFieldHighlight = "flightNumber"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedAircraftType {
                                     ocrText(from: img, label: "AircraftType") { text in
-                                        DispatchQueue.main.async { ocrAircraftType = text }
+                                        DispatchQueue.main.async {
+                                            ocrAircraftType = text
+                                            ocrFieldHighlight = "aircraftType"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedAircraftReg {
                                     ocrText(from: img, label: "AircraftReg") { text in
-                                        DispatchQueue.main.async { ocrAircraftReg = text }
+                                        DispatchQueue.main.async {
+                                            ocrAircraftReg = text
+                                            ocrFieldHighlight = "aircraftReg"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedDeparture {
                                     ocrText(from: img, label: "Departure") { text in
-                                        DispatchQueue.main.async { ocrDeparture = text }
+                                        DispatchQueue.main.async {
+                                            ocrDeparture = text
+                                            ocrFieldHighlight = "departureAirport"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedArrival {
                                     ocrText(from: img, label: "Arrival") { text in
-                                        DispatchQueue.main.async { ocrArrival = text }
+                                        DispatchQueue.main.async {
+                                            ocrArrival = text
+                                            ocrFieldHighlight = "arrivalAirport"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedSchedDep {
                                     ocrText(from: img, label: "SchedDep") { text in
-                                        DispatchQueue.main.async { ocrSchedDep = text }
+                                        DispatchQueue.main.async {
+                                            ocrSchedDep = text
+                                            ocrFieldHighlight = "schedDep"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedSchedArr {
                                     ocrText(from: img, label: "SchedArr") { text in
-                                        DispatchQueue.main.async { ocrSchedArr = text }
+                                        DispatchQueue.main.async {
+                                            ocrSchedArr = text
+                                            ocrFieldHighlight = "schedArr"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                                 if let img = croppedDayDate {
                                     ocrText(from: img, label: "DayDate") { text in
-                                        DispatchQueue.main.async { ocrDayDate = text }
+                                        DispatchQueue.main.async {
+                                            ocrDayDate = text
+                                            ocrFieldHighlight = "dayDate"
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                        }
                                     }
                                 }
                         if let img = croppedOutTime {
                             ocrText(from: img, label: "OutTime") { text in
-                                DispatchQueue.main.async { ocrOutTime = text }
+                                DispatchQueue.main.async {
+                                    ocrOutTime = text
+                                    ocrFieldHighlight = "outTime"
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                }
+                            }
                         }
-                    }
                         if let img = croppedOffTime {
                             ocrText(from: img, label: "OffTime") { text in
-                                DispatchQueue.main.async { ocrOffTime = text }
+                                DispatchQueue.main.async {
+                                    ocrOffTime = text
+                                    ocrFieldHighlight = "offTime"
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                }
+                            }
                         }
-                    }
                         if let img = croppedOnTime {
                             ocrText(from: img, label: "OnTime") { text in
-                                DispatchQueue.main.async { ocrOnTime = text }
+                                DispatchQueue.main.async {
+                                    ocrOnTime = text
+                                    ocrFieldHighlight = "onTime"
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                }
+                            }
                         }
-                    }
                         if let img = croppedInTime {
                             ocrText(from: img, label: "InTime") { text in
-                                DispatchQueue.main.async { ocrInTime = text }
+                                DispatchQueue.main.async {
+                                    ocrInTime = text
+                                    ocrFieldHighlight = "inTime"
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                                }
                             }
                         }
                 } else {
@@ -952,6 +1074,39 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                 }
                     }
                 }
+        }
+        .sheet(isPresented: $showCrewReviewSheet) {
+            CrewReviewModal(
+                crewNames: $crewNamesNeedingReview,
+                onConfirm: {
+                    for review in crewNamesNeedingReview {
+                        switch review.role {
+                        case "Commander": ocrCrewCommander = review.corrected
+                        case "SIC": ocrCrewSIC = review.corrected
+                        case "Relief": ocrCrewRelief = review.corrected
+                        case "Relief2": ocrCrewRelief2 = review.corrected
+                        case "ISM": ocrCrewCustom2ISM = review.corrected
+                        case "SP": ocrCrewCustom4SP = review.corrected
+                        case "FP": ocrCrewCustom1FP = review.corrected
+                        case "FlightAttendant": ocrCrewFlightAttendant = review.corrected
+                        case "FlightAttendant2": ocrCrewFlightAttendant2 = review.corrected
+                        case "FlightAttendant3": ocrCrewFlightAttendant3 = review.corrected
+                        case "FlightAttendant4": ocrCrewFlightAttendant4 = review.corrected
+                        default: break
+                        }
+                    }
+                    crewNamesNeedingReview.removeAll()
+                    showCrewReviewSheet = false
+                    if isLogTenProInstalled() {
+                        exportToLogTen(jsonString: generateLogTenJSON())
+                    } else {
+                        showLogTenAlert = true
+                    }
+                },
+                onCancel: {
+                    showCrewReviewSheet = false
+                }
+            )
         }
     }
     
@@ -996,32 +1151,27 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         }
     }
     
-    // Helper to update parsedCrewList after all OCRs
+    // Helper to update parsedCrewList after all OCRs, with new display labels and grouping
     func updateParsedCrewList(cockpitResults: [(String, String)], cabinResults: [(String, String)]) {
         let nonEmptyCockpit = cockpitResults.filter { !$0.1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let nonEmptyCabin = cabinResults.filter { !$0.1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         parsedCrewList = []
-        // Cockpit assignment logic
-        if nonEmptyCockpit.count == 4 {
-            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
-            parsedCrewList.append("Relief: \(nonEmptyCockpit[1].1)")
-            parsedCrewList.append("SIC: \(nonEmptyCockpit[2].1)")
-            parsedCrewList.append("Relief2: \(nonEmptyCockpit[3].1)")
-        } else if nonEmptyCockpit.count == 3 {
-            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
-            parsedCrewList.append("SIC: \(nonEmptyCockpit[1].1)")
-            parsedCrewList.append("Relief2: \(nonEmptyCockpit[2].1)")
-        } else if nonEmptyCockpit.count == 2 {
-            parsedCrewList.append("Commander: \(nonEmptyCockpit[0].1)")
-            parsedCrewList.append("SIC: \(nonEmptyCockpit[1].1)")
-        } else {
-            for (role, text) in nonEmptyCockpit {
-                parsedCrewList.append("\(role): \(text)")
-            }
+        cockpitCrewDisplay = []
+        cabinCrewDisplay = []
+        // Cockpit crew in order: PIC, SIC, Relief, Relief
+        let cockpitLabels = ["PIC", "SIC", "Relief", "Relief"]
+        for (i, (_, text)) in nonEmptyCockpit.prefix(4).enumerated() {
+            let label = i < cockpitLabels.count ? cockpitLabels[i] : "Relief"
+            let entry = "\(label): \(text)"
+            parsedCrewList.append(entry)
+            cockpitCrewDisplay.append(entry)
         }
-        // Cabin crew assignment (append after cockpit)
-        for (role, text) in nonEmptyCabin {
-            parsedCrewList.append("\(role): \(text)")
+        // Cabin crew in order: ISM, SP, FP, FA, FA2, FA3, FA4
+        let cabinLabels = ["ISM", "SP", "FP", "FA", "FA2", "FA3", "FA4"]
+        for (i, (_, text)) in nonEmptyCabin.prefix(7).enumerated() {
+            let entry = "\(cabinLabels[i]): \(text)"
+            parsedCrewList.append(entry)
+            cabinCrewDisplay.append(entry)
         }
     }
     
@@ -1042,62 +1192,110 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         // Run OCR on each cropped region
         if let img = croppedFlightNumber {
             ocrText(from: img, label: "FlightNumber") { text in
-                DispatchQueue.main.async { ocrFlightNumber = text }
+                DispatchQueue.main.async {
+                    ocrFlightNumber = text
+                    ocrFieldHighlight = "flightNumber"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedAircraftType {
             ocrText(from: img, label: "AircraftType") { text in
-                DispatchQueue.main.async { ocrAircraftType = text }
+                DispatchQueue.main.async {
+                    ocrAircraftType = text
+                    ocrFieldHighlight = "aircraftType"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedAircraftReg {
             ocrText(from: img, label: "AircraftReg") { text in
-                DispatchQueue.main.async { ocrAircraftReg = text }
+                DispatchQueue.main.async {
+                    ocrAircraftReg = text
+                    ocrFieldHighlight = "aircraftReg"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedDeparture {
             ocrText(from: img, label: "Departure") { text in
-                DispatchQueue.main.async { ocrDeparture = text }
+                DispatchQueue.main.async {
+                    ocrDeparture = text
+                    ocrFieldHighlight = "departureAirport"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedArrival {
             ocrText(from: img, label: "Arrival") { text in
-                DispatchQueue.main.async { ocrArrival = text }
+                DispatchQueue.main.async {
+                    ocrArrival = text
+                    ocrFieldHighlight = "arrivalAirport"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedSchedDep {
             ocrText(from: img, label: "SchedDep") { text in
-                DispatchQueue.main.async { ocrSchedDep = text }
+                DispatchQueue.main.async {
+                    ocrSchedDep = text
+                    ocrFieldHighlight = "schedDep"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedSchedArr {
             ocrText(from: img, label: "SchedArr") { text in
-                DispatchQueue.main.async { ocrSchedArr = text }
+                DispatchQueue.main.async {
+                    ocrSchedArr = text
+                    ocrFieldHighlight = "schedArr"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedDayDate {
             ocrText(from: img, label: "DayDate") { text in
-                DispatchQueue.main.async { ocrDayDate = text }
+                DispatchQueue.main.async {
+                    ocrDayDate = text
+                    ocrFieldHighlight = "dayDate"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedOutTime {
             ocrText(from: img, label: "OutTime") { text in
-                DispatchQueue.main.async { ocrOutTime = text }
+                DispatchQueue.main.async {
+                    ocrOutTime = text
+                    ocrFieldHighlight = "outTime"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedOffTime {
             ocrText(from: img, label: "OffTime") { text in
-                DispatchQueue.main.async { ocrOffTime = text }
+                DispatchQueue.main.async {
+                    ocrOffTime = text
+                    ocrFieldHighlight = "offTime"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedOnTime {
             ocrText(from: img, label: "OnTime") { text in
-                DispatchQueue.main.async { ocrOnTime = text }
+                DispatchQueue.main.async {
+                    ocrOnTime = text
+                    ocrFieldHighlight = "onTime"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
         if let img = croppedInTime {
             ocrText(from: img, label: "InTime") { text in
-                DispatchQueue.main.async { ocrInTime = text }
+                DispatchQueue.main.async {
+                    ocrInTime = text
+                    ocrFieldHighlight = "inTime"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ocrFieldHighlight = nil }
+                }
             }
         }
     }
@@ -1105,35 +1303,28 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     // Helper: process crew ROIs from dashboard image (using original dashboard crew ROI)
     func processDashboardCrewROIs(from uiImage: UIImage) {
         print("[DEBUG] Processing dashboard crew ROIs using dashboardCrewNamesROI")
-        
         // Crop the dashboard crew names section
         if let cropped = cropImage(uiImage, to: dashboardCrewNamesROI) {
             ocrText(from: cropped, label: "DashboardCrewNames") { crewText in
                 DispatchQueue.main.async {
                     print("[DEBUG] Dashboard crew names OCR: \(crewText)")
-                    
                     // Parse the crew text and extract names
                     let crewNames = self.parseDashboardCrewText(crewText)
-                    
-                    // Create parsed crew list entries
                     self.parsedCrewList = []
                     print("[DEBUG] Creating parsed crew list with \(crewNames.count) names")
-                    for (index, name) in crewNames.enumerated() {
-                        switch index {
-                        case 0:
-                            self.parsedCrewList.append("Commander: \(name)")
-                            print("[DEBUG] Added Commander: \(name)")
-                        case 1:
-                            self.parsedCrewList.append("SIC: \(name)")
-                            print("[DEBUG] Added SIC: \(name)")
-                        case 2:
-                            self.parsedCrewList.append("Relief: \(name)")
-                            print("[DEBUG] Added Relief: \(name)")
-                        case 3:
-                            self.parsedCrewList.append("Relief2: \(name)")
-                            print("[DEBUG] Added Relief2: \(name)")
-                        default:
-                            break
+                    if crewNames.count >= 3 {
+                        let cockpitLabels = ["PIC", "SIC", "Relief", "Relief"]
+                        // All except last are cockpit crew
+                        for (i, name) in crewNames.dropLast().enumerated() {
+                            let label = i < cockpitLabels.count ? cockpitLabels[i] : "Relief"
+                            self.parsedCrewList.append("\(label): \(name)")
+                        }
+                        // Last is always ISM (cabin crew)
+                        self.parsedCrewList.append("ISM: \(crewNames.last!)")
+                    } else {
+                        // Fallback: not enough names, show as-is
+                        for name in crewNames {
+                            self.parsedCrewList.append(name)
                         }
                     }
                     print("[DEBUG] Final parsedCrewList: \(self.parsedCrewList)")
@@ -1187,20 +1378,20 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
     func processCrewROIs(from uiImage: UIImage) {
         // Cockpit crew logic: OCR all 4, then assign roles after all are done
         let cockpitROIs: [(String, FieldROI)] = [
-            ("Commander", commanderROI),
-            ("Relief", reliefROI),
-            ("SIC", sicROI),
-            ("Relief2", relief2ROI)
+            ("Commander", crewCommanderROI),
+            ("SIC", crewSICROI),
+            ("Relief", crewReliefROI),
+            ("Relief2", crewRelief2ROI)
         ]
         // Cabin crew ROIs and roles
         let cabinROIs: [(String, FieldROI)] = [
-            ("Custom5_FP", crewCustom1ROI),   // FP role (Charmaine Fong)
-            ("Custom1_ISM", crewCustom2ROI),  // ISM role (Aries Yip)
-            ("Custom4_SP", crewCustom4ROI),   // SP role (Christie Leung)
-            ("FlightAttendant", crewFlightAttendantROI),    // Primary FA (Michelle Liu)
-            ("FlightAttendant2", crewFlightAttendant2ROI),  // FA2 (Venus Siu)
-            ("FlightAttendant3", crewFlightAttendant3ROI),  // FA3 (Charlie Hui)
-            ("FlightAttendant4", crewFlightAttendant4ROI)   // FA4 (Edmund Leung)
+            ("ISM", crewCustom2ISMROI),   // ISM role
+            ("SP", crewCustom4SPROI),     // SP role
+            ("FP", crewCustom1FPROI),     // FP role
+            ("FlightAttendant", crewFlightAttendantROI),    // Primary FA
+            ("FlightAttendant2", crewFlightAttendant2ROI),  // FA2
+            ("FlightAttendant3", crewFlightAttendant3ROI),  // FA3
+            ("FlightAttendant4", crewFlightAttendant4ROI)   // FA4
         ]
         var cockpitResults: [(String, String)] = Array(repeating: ("", ""), count: 4)
         var cabinResults: [(String, String)] = Array(repeating: ("", ""), count: cabinROIs.count)
@@ -1213,6 +1404,14 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                 ocrText(from: cropped, label: "Crew_\(role)_ROI") { crewText in
                     DispatchQueue.main.async {
                         cockpitResults[i] = (role, crewText)
+                        // Assign to state variable
+                        switch role {
+                        case "Commander": ocrCrewCommander = crewText
+                        case "SIC": ocrCrewSIC = crewText
+                        case "Relief": ocrCrewRelief = crewText
+                        case "Relief2": ocrCrewRelief2 = crewText
+                        default: break
+                        }
                         completed += 1
                         if completed == totalToComplete {
                             updateParsedCrewList(cockpitResults: cockpitResults, cabinResults: cabinResults)
@@ -1231,6 +1430,17 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                 ocrText(from: cropped, label: "Crew_\(role)_ROI") { crewText in
                     DispatchQueue.main.async {
                         cabinResults[i] = (role, crewText)
+                        // Assign to state variable
+                        switch role {
+                        case "ISM": ocrCrewCustom2ISM = crewText
+                        case "SP": ocrCrewCustom4SP = crewText
+                        case "FP": ocrCrewCustom1FP = crewText
+                        case "FlightAttendant": ocrCrewFlightAttendant = crewText
+                        case "FlightAttendant2": ocrCrewFlightAttendant2 = crewText
+                        case "FlightAttendant3": ocrCrewFlightAttendant3 = crewText
+                        case "FlightAttendant4": ocrCrewFlightAttendant4 = crewText
+                        default: break
+                        }
                         completed += 1
                         if completed == totalToComplete {
                             updateParsedCrewList(cockpitResults: cockpitResults, cabinResults: cabinResults)
@@ -1250,6 +1460,48 @@ func generateFlightKey(date: String, flightNumber: String, from: String, to: Str
     let hash = SHA256.hash(data: Data(base.utf8))
     return "FC_" + hash.compactMap { String(format: "%02x", $0) }.joined().prefix(16)
 }
+
+func titleCase(_ name: String) -> String {
+    name
+        .lowercased()
+        .split(separator: " ")
+        .map { $0.capitalized }
+        .joined(separator: " ")
+}
+
+// Function to check if any crew names need review (without generating JSON)
+func checkCrewNamesForReview() -> Bool {
+    // Clear the review list first
+    crewNamesNeedingReview.removeAll()
+    
+    // Check each crew role for trailing dots
+    let crewRoles = [
+        ("Commander", ocrCrewCommander),
+        ("SIC", ocrCrewSIC),
+        ("Relief", ocrCrewRelief),
+        ("Relief2", ocrCrewRelief2),
+        ("ISM", ocrCrewCustom2ISM),
+        ("SP", ocrCrewCustom4SP),
+        ("FP", ocrCrewCustom1FP),
+        ("FlightAttendant", ocrCrewFlightAttendant),
+        ("FlightAttendant2", ocrCrewFlightAttendant2),
+        ("FlightAttendant3", ocrCrewFlightAttendant3),
+        ("FlightAttendant4", ocrCrewFlightAttendant4)
+    ]
+    
+    for (role, ocrText) in crewRoles {
+        let trimmedText = ocrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedText.isEmpty && trimmedText.hasSuffix("...") {
+            let correctedName = trimmedText.replacingOccurrences(of: "...", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !correctedName.isEmpty {
+                print("[DEBUG] Adding to crewNamesNeedingReview: role=\(role), original=\(trimmedText), corrected=\(correctedName)")
+                crewNamesNeedingReview.append(CrewNameReview(role: role, original: trimmedText, corrected: correctedName))
+            }
+        }
+    }
+    
+    return !crewNamesNeedingReview.isEmpty
+}
 }
 #Preview {
     ContentView(incomingImageURL: .constant(nil))
@@ -1262,6 +1514,7 @@ struct FlightDataCard: View {
     let value: String
     let color: Color
     var isCustomIcon: Bool = false
+    var highlight: Bool = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1288,6 +1541,184 @@ struct FlightDataCard: View {
                 .foregroundColor(.primary)
         }
         .padding(12)
+        .background(highlight ? Color.yellow.opacity(0.3) : Color(.systemGray6))
+        .cornerRadius(12)
+        .animation(.easeInOut, value: highlight)
+    }
+}
+
+struct CrewReviewModal: View {
+    @Binding var crewNames: [ContentView.CrewNameReview]
+    var onConfirm: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Header explanation cards
+                    VStack(spacing: 16) {
+                        // Why am I seeing this card
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.title3)
+                                Text("Why am I seeing this?")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            
+                            Text("To avoid duplicate crew entries in LogTen Pro, names must match exactly. The name below was flagged because it ends with \"...\" (indicating it may be incomplete or excessively long).")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(16)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        
+                        // What should I do card
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.teal)
+                                    .font(.title3)
+                                Text("What should I do?")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            
+                            Text("Please review and correct the name to ensure it is complete and matches the official crew list. When you're satisfied, tap \"Confirm & Export\" to continue.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(16)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Crew names review section
+                    if crewNames.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 40))
+                            Text("No crew names need review")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            Text("All crew names are complete and ready for export")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(32)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                Image(systemName: "person.3.fill")
+                                    .foregroundColor(.teal)
+                                    .font(.title3)
+                                Text("Review Crew Names")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                            
+                            LazyVStack(spacing: 12) {
+                                ForEach(crewNames.indices, id: \.self) { index in
+                                    CrewReviewCard(
+                                        role: crewNames[index].role,
+                                        original: crewNames[index].original,
+                                        corrected: $crewNames[index].corrected
+                                    )
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                    
+                    Spacer(minLength: 20)
+                }
+                .padding(.top, 20)
+            }
+            .navigationTitle("Review Crew Names")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Confirm & Export") {
+                        onConfirm()
+                    }
+                    .disabled(crewNames.isEmpty)
+                    .foregroundColor(.teal)
+                    .fontWeight(.semibold)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Crew Review Card Component
+struct CrewReviewCard: View {
+    let role: String
+    let original: String
+    @Binding var corrected: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "person.circle.fill")
+                    .foregroundColor(.teal)
+                    .font(.title3)
+                Text(role)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Original:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.medium)
+                Text(original)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(8)
+            }
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Corrected:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.medium)
+                TextField("Enter corrected name", text: $corrected)
+                    .textInputAutocapitalization(.words)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+            }
+        }
+        .padding(16)
         .background(Color(.systemGray6))
         .cornerRadius(12)
     }
