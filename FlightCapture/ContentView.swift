@@ -797,7 +797,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] Flight number edited: \(newValue)")
                                             editedFlightNumber = newValue
                                         },
-                                        confidence: calculateFlightNumberConfidence(flightNumber ?? "")
+                                        confidence: calculateFlightNumberConfidence(flightNumber)
                                     )
                                 }
                                 
@@ -812,7 +812,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] Aircraft reg edited: \(newValue)")
                                             editedAircraftReg = newValue
                                         },
-                                        confidence: calculateAircraftRegConfidence(aircraftReg ?? "")
+                                        confidence: calculateAircraftRegConfidence(aircraftReg)
                                     )
                                 }
                                 
@@ -827,7 +827,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] Departure edited: \(newValue)")
                                             editedDeparture = newValue
                                         },
-                                        confidence: calculateAirportConfidence(departureAirport ?? "")
+                                        confidence: calculateAirportConfidence(departureAirport)
                                     )
                         }
                                 
@@ -842,7 +842,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] Arrival edited: \(newValue)")
                                             editedArrival = newValue
                                         },
-                                        confidence: calculateAirportConfidence(arrivalAirport ?? "")
+                                        confidence: calculateAirportConfidence(arrivalAirport)
                                     )
                     }
                 }
@@ -869,7 +869,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] OUT time edited: \(newValue)")
                                             editedOutTime = newValue
                                         },
-                                        confidence: outTime != nil ? .high : .low
+                                        confidence: !outTime.isEmpty ? .high : .low
                                     )
                                 }
                                 if let offTime = offTime {
@@ -884,7 +884,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] OFF time edited: \(newValue)")
                                             editedOffTime = newValue
                                         },
-                                        confidence: offTime != nil ? .high : .low
+                                        confidence: !offTime.isEmpty ? .high : .low
                                     )
                                 }
                                 if let onTime = onTime {
@@ -899,7 +899,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] ON time edited: \(newValue)")
                                             editedOnTime = newValue
                                         },
-                                        confidence: onTime != nil ? .high : .low
+                                        confidence: !onTime.isEmpty ? .high : .low
                                     )
                                 }
                                 if let inTime = inTime {
@@ -914,7 +914,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             print("[DEBUG] IN time edited: \(newValue)")
                                             editedInTime = newValue
                                         },
-                                        confidence: inTime != nil ? .high : .low
+                                        confidence: !inTime.isEmpty ? .high : .low
                                     )
                                 }
                             }
