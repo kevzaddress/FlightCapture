@@ -893,21 +893,6 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                         confidence: !offTime.isEmpty ? .high : .low
                                     )
                                 }
-                                if let onTime = onTime {
-                                    FlightDataCard(
-                                        icon: "ON",
-                                        title: "ON",
-                                        value: onTime,
-                                        color: .teal,
-                                        isCustomIcon: true,
-                                        highlight: ocrFieldHighlight == "onTime",
-                                        onEdit: { newValue in
-                                            print("[DEBUG] ON time edited: \(newValue)")
-                                            editedOnTime = newValue
-                                        },
-                                        confidence: !onTime.isEmpty ? .high : .low
-                                    )
-                                }
                                 if let inTime = inTime {
                                     FlightDataCard(
                                         icon: "IN",
@@ -921,6 +906,21 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                                             editedInTime = newValue
                                         },
                                         confidence: !inTime.isEmpty ? .high : .low
+                                    )
+                                }
+                                if let onTime = onTime {
+                                    FlightDataCard(
+                                        icon: "ON",
+                                        title: "ON",
+                                        value: onTime,
+                                        color: .teal,
+                                        isCustomIcon: true,
+                                        highlight: ocrFieldHighlight == "onTime",
+                                        onEdit: { newValue in
+                                            print("[DEBUG] ON time edited: \(newValue)")
+                                            editedOnTime = newValue
+                                        },
+                                        confidence: !onTime.isEmpty ? .high : .low
                                     )
                                 }
                             }
@@ -2160,18 +2160,18 @@ struct ReviewAllDataModal: View {
                             )
                             
                             ReviewDataField(
-                                title: "ON",
-                                value: $editedData.onTime,
-                                originalValue: flightData.onTime,
-                                icon: "ON",
-                                isCustomIcon: true
-                            )
-                            
-                            ReviewDataField(
                                 title: "IN",
                                 value: $editedData.inTime,
                                 originalValue: flightData.inTime,
                                 icon: "IN",
+                                isCustomIcon: true
+                            )
+                            
+                            ReviewDataField(
+                                title: "ON",
+                                value: $editedData.onTime,
+                                originalValue: flightData.onTime,
+                                icon: "ON",
                                 isCustomIcon: true
                             )
                         }
