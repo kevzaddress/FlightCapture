@@ -2324,6 +2324,19 @@ struct ReviewDataField: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .keyboardType(isTimeField ? .numberPad : .default)
+                    .toolbar {
+                        if isTimeField {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                Spacer()
+                                Button("Done") {
+                                    saveEdit()
+                                    isEditing = false
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                }
+                            }
+                        }
+                    }
                     .onSubmit {
                         saveEdit()
                     }
@@ -2365,6 +2378,11 @@ struct ReviewDataField: View {
         withAnimation {
             isEditing = false
         }
+    }
+
+    // In ReviewDataField, add a property to detect if the field is a time field:
+    var isTimeField: Bool {
+        ["OUT", "OFF", "ON", "IN"].contains(title.uppercased())
     }
 }
 
