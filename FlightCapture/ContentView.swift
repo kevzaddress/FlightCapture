@@ -681,7 +681,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                             .padding(.bottom, 8)
                     }
                     // After the Import Screenshots button and its caption, but before the Export to LogTen Pro button:
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
                 HStack {
                             Image(systemName: "brain.head.profile")
                                 .foregroundColor(.teal)
@@ -692,33 +692,39 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     Spacer()
                         }
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("FlightCapture uses AI to read flight data from your screenshots. Each field shows a confidence indicator:")
+                            Text("FlightCapture uses AI to read flight data from your screenshots.\nEach field shows a confidence indicator:")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            HStack(spacing: 16) {
-                                HStack(spacing: 6) {
+                            HStack(spacing: 34) {
+                                HStack(spacing: 8) {
                                     Circle()
                                         .fill(Color.green)
-                                        .frame(width: 8, height: 8)
-                                    Text("High confidence")
-                                    .font(.caption)
+                                        .frame(width: 15, height: 8)
+                                    Text("High\nconfidence")
+                                        .font(.caption)
+                                        .multilineTextAlignment(.leading)
                                         .foregroundColor(.secondary)
+                                        .lineLimit(2)
                                 }
-                                HStack(spacing: 6) {
+                                HStack(spacing: 8) {
                                     Circle()
                                         .fill(Color(red: 1.0, green: 0.8, blue: 0.0))
-                                        .frame(width: 8, height: 8)
-                                    Text("Medium confidence")
+                                        .frame(width: 15, height: 8)
+                                    Text("Medium\nconfidence")
                                         .font(.caption)
+                                        .multilineTextAlignment(.leading)
                                         .foregroundColor(.secondary)
+                                        .lineLimit(2)
                                 }
-                                HStack(spacing: 6) {
+                                HStack(spacing: 8) {
                                     Circle()
                                         .fill(Color.red)
-                                        .frame(width: 8, height: 8)
-                                    Text("Low confidence")
+                                        .frame(width: 15, height: 8)
+                                    Text("Low\nconfidence")
                                         .font(.caption)
+                                        .multilineTextAlignment(.leading)
                                         .foregroundColor(.secondary)
+                                        .lineLimit(2)
                                 }
                             }
                         }
