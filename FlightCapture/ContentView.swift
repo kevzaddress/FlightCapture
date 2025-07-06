@@ -457,7 +457,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             "dateAndTimeFormat": "dd/MM/yyyy HH:mm",
             "serviceID": "com.flightcapture.app",
             "numberOfEntities": 1,
-            "timesAreZulu": true
+            "timesAreZulu": true,
+            "shouldApplyAutoFillTimes": true // Set to false to revert
         ]
         
         let payload: [String: Any] = [
