@@ -288,17 +288,27 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         return extractInTime(from: recognizedText)
     }
     // Helper to infer the full date from OCR day-of-week and day-of-month
-    func inferDate(dayOfWeek: String, dayOfMonth: Int, today: Date = Date()) -> Date? {
+    func inferDate(dayOfWeek: String, dayOfMonth: Int, today: Date = Date()) -> (date: Date?, confidence: ConfidenceLevel) {
         let calendar = Calendar.current
-        for offset in 0..<21 {
-            guard let candidate = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
-            let weekdaySymbol = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: candidate) - 1]
-            let day = calendar.component(.day, from: candidate)
-            if weekdaySymbol.lowercased().hasPrefix(dayOfWeek.lowercased()) && day == dayOfMonth {
-                return candidate
+        let maxYearsBack = 2
+        let todayNoon = calendar.startOfDay(for: today).addingTimeInterval(12*3600)
+        for yearOffset in 0...maxYearsBack {
+            let year = calendar.component(.year, from: today) - yearOffset
+            for month in (1...12).reversed() {
+                var comps = DateComponents()
+                comps.year = year
+                comps.month = month
+                comps.day = dayOfMonth
+                if let candidate = calendar.date(from: comps), candidate <= todayNoon {
+                    let weekdaySymbol = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: candidate) - 1]
+                    if weekdaySymbol.lowercased().hasPrefix(dayOfWeek.lowercased()) {
+                        // If this is the only match in the last 2 years, high confidence
+                        return (candidate, .high)
+                    }
+                }
             }
         }
-        return nil // No match found
+        return (nil, .low)
     }
     // Helper to parse OCR string like "Mon 30" or "30, Mon" into ("Mon", 30)
     func parseDayDate(_ text: String) -> (String, Int)? {
@@ -315,17 +325,16 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         return nil
     }
     // Returns inferred date if possible
-    var inferredDate: Date? {
-        // Use edited date if available, otherwise infer from OCR
+    var inferredDateWithConfidence: (date: Date?, confidence: ConfidenceLevel) {
         if let editedDate = editedDate {
-            return editedDate
+            return (editedDate, .high)
         }
-        guard let (dow, dom) = parseDayDate(ocrDayDate) else { return nil }
+        guard let (dow, dom) = parseDayDate(ocrDayDate) else { return (nil, .low) }
         return inferDate(dayOfWeek: dow, dayOfMonth: dom)
     }
     // Helper to format scheduled time as dd/MM/yyyy HH:mm for LogTen
     func formatScheduledTime(ocrTime: String, fallback: String) -> String {
-        guard let date = inferredDate else { return fallback }
+        guard let date = inferredDateWithConfidence.date else { return fallback }
         // Extract Zulu time and check for +1 day indicator
         let (zulu, isNextDay) = extractZuluTime(ocrTime)
         guard let zulu = zulu, zulu.count >= 5 else { return fallback }
@@ -855,12 +864,11 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                 }
                             
                             // Date card - full width below flight/aircraft cards
-                            if let flightDate = inferredDate {
-                                FlightDateCard(
-                                    date: flightDate,
-                                    confidence: .high
-                                )
-                            }
+                            let (flightDate, dateConfidence) = inferredDateWithConfidence
+                            FlightDateCard(
+                                date: flightDate,
+                                confidence: dateConfidence
+                            )
                             
                             // OUT, OFF, ON, IN cards as a separate grid for clarity and compiler performance
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
@@ -1248,7 +1256,7 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
             aircraftReg: aircraftReg ?? "",
             departure: departureAirport ?? "",
             arrival: arrivalAirport ?? "",
-            date: inferredDate,
+            date: inferredDateWithConfidence.date,
             outTime: outTime ?? "",
             offTime: offTime ?? "",
             onTime: onTime ?? "",
@@ -1322,8 +1330,8 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
         parsedCrewList = []
         cockpitCrewDisplay = []
         cabinCrewDisplay = []
-        // Cockpit crew in order: PIC, SIC, Relief, Relief
-        let cockpitLabels = ["PIC", "SIC", "Relief", "Relief"]
+        // Cockpit crew in order: PIC, SIC, Relief, Relief2
+        let cockpitLabels = ["PIC", "SIC", "Relief", "Relief2"]
         for (i, (_, text)) in nonEmptyCockpit.prefix(4).enumerated() {
             let label = i < cockpitLabels.count ? cockpitLabels[i] : "Relief"
             let rawName = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1478,26 +1486,22 @@ let inTimeROI = FieldROI(x: 1970/2360, y: 1270/1640, width: (2055-1970)/2360, he
                     // Parse the crew text and extract names
                     let crewNames = self.parseDashboardCrewText(crewText)
                     self.parsedCrewList = []
+                    self.cockpitCrewDisplay = []
+                    self.cabinCrewDisplay = []
                     print("[DEBUG] Creating parsed crew list with \(crewNames.count) names")
-                    if crewNames.count >= 3 {
-                        let cockpitLabels = ["PIC", "SIC", "Relief", "Relief"]
-                        // All except last are cockpit crew
-                        for (i, name) in crewNames.dropLast().enumerated() {
-                            let label = i < cockpitLabels.count ? cockpitLabels[i] : "Relief"
-                            let formattedName = self.titleCase(name)
-                            self.parsedCrewList.append("\(label): \(formattedName)")
-                        }
-                        // Last is always ISM (cabin crew)
-                        let lastFormattedName = self.titleCase(crewNames.last!)
-                        self.parsedCrewList.append("ISM: \(lastFormattedName)")
-                    } else {
-                        // Fallback: not enough names, show as-is
-                        for name in crewNames {
-                            let formattedName = self.titleCase(name)
-                            self.parsedCrewList.append(formattedName)
-                        }
+                    
+                    // All names from dashboard are cockpit crew only
+                    let cockpitLabels = ["PIC", "SIC", "Relief", "Relief2"]
+                    for (i, name) in crewNames.enumerated() {
+                        let label = i < cockpitLabels.count ? cockpitLabels[i] : "Relief"
+                        let formattedName = self.titleCase(name)
+                        self.parsedCrewList.append("\(label): \(formattedName)")
+                        self.cockpitCrewDisplay.append((role: label, name: formattedName))
                     }
+                    
                     print("[DEBUG] Final parsedCrewList: \(self.parsedCrewList)")
+                    print("[DEBUG] Final cockpitCrewDisplay: \(self.cockpitCrewDisplay)")
+                    print("[DEBUG] Final cabinCrewDisplay: \(self.cabinCrewDisplay)")
                 }
             }
         } else {
