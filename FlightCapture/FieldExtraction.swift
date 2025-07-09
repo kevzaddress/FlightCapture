@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Extracts the flight number (e.g., CPA648, CX876) from recognized text.
 func extractFlightNumber(from recognizedText: String) -> String? {
@@ -185,4 +186,21 @@ func extractArrivalAirport(from recognizedText: String) -> String? {
         }
     }
     return nil
+}
+
+// MARK: - Field Extraction Utilities
+
+/// Convert pixel coordinates to normalized coordinates for Vision framework
+func normalizeCoordinates(
+    topLeft: CGPoint,
+    bottomRight: CGPoint,
+    imageWidth: CGFloat,
+    imageHeight: CGFloat
+) -> ROICoordinates {
+    let x = topLeft.x / imageWidth
+    let y = topLeft.y / imageHeight
+    let width = (bottomRight.x - topLeft.x) / imageWidth
+    let height = (bottomRight.y - topLeft.y) / imageHeight
+    
+    return ROICoordinates(x: x, y: y, width: width, height: height)
 } 
